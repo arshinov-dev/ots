@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Задачи 1-3</title>
+
+    <script>
+        window.MathJax = {
+            tex: { inlineMath: [['$', '$'], ['\\(', '\\)']], displayMath: [['$$', '$$']] },
+            startup: { typeset: false }
+        };
+    </script>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Verdana, sans-serif; background-color: #f8fafc; color: #0f172a; margin: 0; padding: 20px; line-height: 1.6; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { text-align: center; color: #1e293b; border-bottom: 4px solid #3b82f6; padding-bottom: 15px; margin-bottom: 30px; text-transform: uppercase;}
+
+        .task-card { background: white; border-radius: 8px; padding: 25px; margin-bottom: 40px; box-shadow: 0 5px 15px rgba(0,0,0,0.08); border-top: 6px solid #3b82f6;}
+        h2 { margin-top: 0; color: #1e293b; font-size: 1.3rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 20px;}
+
+        .setup-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; background: #f1f5f9; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #cbd5e1;}
+        .input-item { display: flex; flex-direction: column; }
+        .input-item label { font-size: 13px; font-weight: 700; color: #475569; margin-bottom: 5px; cursor: default; }
+        .input-item input { padding: 8px; border: 1px solid #94a3b8; border-radius: 6px; font-weight: bold; font-family: monospace; font-size: 14px; transition: 0.2s;}
+        .input-item input:focus { border-color: #3b82f6; outline: none; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2); }
+        .unit-span { color: #2563eb; font-weight: 800; }
+
+        .math-box { background: #ffffff; padding: 15px 20px; border-radius: 4px; border: 1px dashed #cbd5e1; margin: 15px 0; overflow-x: auto; color: #1e3a8a; font-size: 1.1em;}
+
+        .plot-box { width: 100%; height: 350px; background: white;}
+        .grid-2col { display: grid; grid-template-columns: 1.5fr 1fr; gap: 20px; }
+
+        .afc-box { position: relative; margin: 20px 0; padding: 20px 0 40px 50px; background: #fff; height: 180px; border: 1px solid #e2e8f0; border-radius: 8px;}
+        .afc-y-axis { position: absolute; left: 48px; top: 15px; bottom: 38px; width: 2px; background: #000; }
+        .afc-y-axis::after { content: ''; position: absolute; top: -10px; left: -4px; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 10px solid #000; }
+        .afc-y-label { position: absolute; left: 5px; top: 40%; transform: rotate(-90deg); font-size: 12px; font-weight: bold; }
+        .afc-x-axis { position: absolute; left: 48px; right: 15px; bottom: 38px; height: 2px; background: #000; }
+        .afc-x-axis::after { content: ''; position: absolute; right: -10px; top: -4px; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 10px solid #000; }
+        .afc-x-label { position: absolute; right: 15px; bottom: -5px; font-size: 12px; font-weight: bold; }
+        .sliders-container { display: flex; justify-content: space-around; align-items: flex-end; position: absolute; left: 50px; right: 20px; bottom: 38px; height: 140px; z-index: 2; }
+        .slider-unit { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; position: relative; flex: 1;}
+
+        .amp-input { width: 45px; padding: 2px; border: 1px solid #000; border-radius: 4px; font-size: 12px; text-align: center; color: #000; font-weight: bold; margin-bottom: 5px; font-family: monospace; -moz-appearance: textfield;}
+        .amp-input::-webkit-inner-spin-button, .amp-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+        input[type=range][orient=vertical] { writing-mode: bt-lr; -webkit-appearance: slider-vertical; width: 16px; height: 100px; cursor: pointer; margin: 0; accent-color: #dc2626; }
+        .x-tick { position: absolute; bottom: -25px; font-size: 13px; font-weight: bold; color: #000; }
+
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Задачи 1-3</h1>
+
+    <div class="stage-card">
+        <h2>Задача №1: Представление гармонического сигнала</h2>
+        <div class="setup-grid">
+        <style>
+            .no-spin::-webkit-inner-spin-button, .no-spin::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+            .no-spin { -moz-appearance: textfield; }
+        </style>
+            <div class="input-item">
+                <label>Период T <span class="unit-span" id="lbl_t1_T">(мс)</span></label>
+                <input type="number" id="t1_T" value="10" step="1" data-type="time" data-idx="1">
+            </div>
+            <div class="input-item">
+                <label>Амплитуда A <span class="unit-span" id="lbl_t1_A">(мВ)</span></label>
+                <input type="number" id="t1_A" value="15" step="1" data-type="amp" data-idx="1">
+            </div>
+            <div class="input-item">
+                <label>Пост. сост-я A₀ <span class="unit-span" id="lbl_t1_A0">(мВ)</span></label>
+                <input type="number" id="t1_A0" value="5" step="1" data-type="amp" data-idx="1">
+            </div>
+        <div class="input-item" style="min-width: 200px;">
+                <label>Начальная фаза φ₀</label>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div style="display: flex; flex-direction: column; align-items: center;">
+                    <input type="number" id="t1_phi_num" value="1" class="no-spin" style="width: 35px; text-align: center; padding: 2px;" oninput="run()">
+                    <div style="height: 2px; width: 100%; background: #1e3a8a; margin: 2px 0;"></div>
+                    <input type="number" id="t1_phi_den" value="3" class="no-spin" style="width: 35px; text-align: center; padding: 2px;" oninput="run()">
+                    </div>
+                <span style="font-family: 'Times New Roman', Times, serif; font-size: 1.6em; color: #1e3a8a; font-style: italic;">π</span>
+                <span style="font-family: 'Times New Roman', Times, serif; font-size: 1.3em; color: #1e3a8a;">=</span>
+                <span id="phi_rad_val" style="font-family: 'Times New Roman', Times, serif; font-size: 1.25em; color: #1e3a8a; min-width: 70px; text-align: center;">1.047 рад</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="math-box" id="math-1"></div>
+
+        <div class="grid-2col">
+            <div id="plot-1-time" class="plot-box"></div>
+            <div id="plot-1-spec" class="plot-box"></div>
+        </div>
+    </div>
+
+    <div class="stage-card" style="border-top-color: #ef4444;">
+        <h2>Задача №2: Синтез периодического сигнала по заданному АЧС</h2>
+
+        <div class="setup-grid">
+            <div class="input-item">
+                <label>Базовый период T<sub>c</sub> <span class="unit-span" id="lbl_t2_T1">(мс)</span></label>
+                <input type="number" id="t2_T1" value="20" step="1" data-type="time" data-idx="1">
+            </div>
+            <div class="input-item">
+                <label>Количество гармоник</label>
+                <input type="number" id="t2_N" value="5" min="1" max="8" step="1" onchange="initSliders()">
+            </div>
+        </div>
+
+        <div class="afc-box">
+            <div class="afc-y-axis"></div>
+            <div class="afc-y-label">Ампл., мВ</div>
+            <div class="afc-x-axis"></div>
+            <div class="afc-x-label">Частота, кратность гармоник</div>
+            <div id="harm-sliders" class="sliders-container"></div>
+        </div>
+
+        <div class="math-box" id="math-2"></div>
+        <div id="plot-2-time" class="plot-box" style="height: 400px;"></div>
+    </div>
+
+    <div class="stage-card" style="border-top-color: #10b981;">
+        <h2>Задача №3: Дискретизация по теореме Котельникова</h2>
+
+        <div id="math-3-top" class="math-box"></div>
+
+        <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin: 20px 0; font-family: 'Times New Roman', serif; font-size: 1.25em; color: #1e3a8a;">
+            <span>Период дискретизации $T_д =$</span>
+            <input type="number" id="t3_dt" value="0.5" step="0.1" data-type="time" data-idx="1" 
+                   style="width: 65px; padding: 4px; border: 1px solid #94a3b8; border-radius: 4px; font-weight: bold; text-align: center; color: #1e3a8a;" oninput="run()">
+            <span id="lbl_t3_dt" style="color: inherit; font-weight: normal;">(мс)</span>
+        </div>
+
+        <div id="math-3-bot" class="math-box"></div>
+        <div id="plot-3-analog" class="plot-box" style="margin-bottom: 20px;"></div>
+        <div id="plot-3-time" class="plot-box"></div>
+    </div>
+
+</div>
+
+<script>
+    let mjPromise = Promise.resolve();
+    let mathTimeout = null;
+    function renderMath() {
+        if(mathTimeout) clearTimeout(mathTimeout);
+        mathTimeout = setTimeout(() => {
+            if (window.MathJax && window.MathJax.typesetPromise) {
+                mjPromise = mjPromise.then(() => {
+                    MathJax.typesetClear();
+                    return MathJax.typesetPromise();
+                }).catch(err => console.warn(err));
+            }
+        }, 150);
+    }
+
+    const unitDict = {
+        'time': [ {name: 'с', val: 1}, {name: 'мс', val: 1e-3}, {name: 'мкс', val: 1e-6} ],
+        'amp': [ {name: 'В', val: 1}, {name: 'мВ', val: 1e-3}, {name: 'мкВ', val: 1e-6} ],
+        'freq': [ {name: 'МГц', val: 1e6}, {name: 'кГц', val: 1e3}, {name: 'Гц', val: 1} ]
+    };
+
+    const compFreqUnit = { 'с': 'Гц', 'мс': 'кГц', 'мкс': 'МГц' };
+    const compTimeUnit = { 'Гц': 'с', 'кГц': 'мс', 'МГц': 'мкс' };
+
+    function getUnitInfo(id) {
+        let el = document.getElementById(id);
+        let type = el.getAttribute('data-type');
+        let idx = parseInt(el.getAttribute('data-idx'));
+        return unitDict[type][idx];
+    }
+
+    function getVal(id) {
+        let v = parseFloat(document.getElementById(id).value);
+        return isNaN(v) ? 0 : v;
+    }
+
+
+    function setupMagnitudeSpinners() {
+        document.querySelectorAll('input[data-type]').forEach(inp => {
+            let lastVal = inp.value;
+
+            function shiftUnit(direction) {
+                let type = inp.getAttribute('data-type');
+                let maxIdx = unitDict[type].length - 1;
+                let curIdx = parseInt(inp.getAttribute('data-idx'));
+                curIdx += direction;
+                if (curIdx < 0) curIdx = 0;
+                if (curIdx > maxIdx) curIdx = maxIdx;
+
+                inp.setAttribute('data-idx', curIdx);
+                document.getElementById('lbl_' + inp.id).innerText = `(${unitDict[type][curIdx].name})`;
+                run();
+            }
+
+            inp.addEventListener('input', function(e) {
+                    let isTyping = e.inputType && (e.inputType.includes('insertText') || e.inputType.includes('delete') || e.inputType.includes('Paste'));
+                    if (isTyping) {
+                        lastVal = this.value;
+                        run();
+                        return;
+                    }
+
+                let newVal = parseFloat(this.value) || 0;
+                let oldVal = parseFloat(lastVal) || 0;
+                let step = parseFloat(this.getAttribute('step') || 1);
+
+                if (Math.abs(Math.abs(newVal - oldVal) - step) < 0.0001) {
+                    this.value = lastVal;
+                    let direction = newVal > oldVal ? -1 : 1;
+                    shiftUnit(direction);
+                } else {
+                    lastVal = this.value;
+                    run();
+                }
+            });
+
+            inp.addEventListener('keydown', function(e) {
+                if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    shiftUnit(-1);
+                } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    shiftUnit(1);
+                }
+            });
+        });
+    }
+
+    let harmAmps = [0, 15, 8, 5, 4, 3, 2, 2, 1];
+
+    function initSliders() {
+        let t2N_el = document.getElementById('t2_N');
+        let n = parseInt(t2N_el.value);
+        if(isNaN(n) || n < 1) n = 1; if(n > 8) n = 8;
+        t2N_el.value = n;
+        
+        const container = document.getElementById('harm-sliders');
+        let html = '';
+
+        for(let i=1; i<=n; i++) {
+            let val = harmAmps[i] || 0;
+            html += `
+                <div class="slider-unit">
+                    <input type="number" class="amp-input" id="in-h-${i}" value="${val}" step="1" oninput="updateH(${i}, this.value, 'in')">
+                    <input type="range" orient="vertical" id="sl-h-${i}" min="0" max="30" step="1" value="${val}" oninput="updateH(${i}, this.value, 'sl')">
+                    <div class="x-tick">${i}f₁</div>
+                </div>`;
+        }
+        container.innerHTML = html;
+        run();
+    }
+
+    function updateH(i, v, src) {
+        let val = parseFloat(v);
+        if(isNaN(val)) val = 0;
+        harmAmps[i] = val;
+
+        let inEl = document.getElementById(`in-h-${i}`);
+        let slEl = document.getElementById(`sl-h-${i}`);
+        if(src === 'sl' && inEl) inEl.value = val;
+        if(src === 'in' && slEl) slEl.value = val;
+
+        run();
+    }
+
+    function run() {
+        let T1_raw = getVal('t1_T'); if (T1_raw <= 0) T1_raw = 0.001;
+        const uT1 = getUnitInfo('t1_T');
+        const A_raw = getVal('t1_A');   const uA = getUnitInfo('t1_A');
+        const A0_raw = getVal('t1_A0'); const uA0 = getUnitInfo('t1_A0');
+
+        const phi_num = getVal('t1_phi_num');
+        const phi_den = getVal('t1_phi_den') || 1;
+        const phi = (phi_num / phi_den) * Math.PI;
+
+        document.getElementById('phi_rad_val').innerText = phi.toFixed(3) + " рад";
+
+        const T1_sec = T1_raw * uT1.val;
+        const A_V = A_raw * uA.val;
+        const A0_V = A0_raw * uA0.val;
+
+        const f1_Hz = 1 / T1_sec;
+        const w1 = 2 * Math.PI * f1_Hz;
+
+        const f1_disp = 1 / T1_raw;
+        const uF1_name = compFreqUnit[uT1.name];
+
+        let t_z1 = [], u_z1 = [];
+        const duration_z1 = T1_sec * 3;
+        for(let i=0; i<=1000; i++) {
+            let cur_t = (i/1000) * duration_z1;
+            t_z1.push(cur_t / uT1.val);
+            let val_V = A0_V + A_V * Math.sin(w1 * cur_t + phi);
+            u_z1.push(val_V / uA.val);
+        }
+
+        let T2_raw = getVal('t2_T1'); if (T2_raw <= 0) T2_raw = 0.001;
+        const uT2 = getUnitInfo('t2_T1');
+        const n_harm = parseInt(document.getElementById('t2_N').value) || 1;
+
+        const T2_sec = T2_raw * uT2.val;
+        const f_base2_Hz = 1 / T2_sec;
+        const w_base2 = 2 * Math.PI * f_base2_Hz;
+
+        let t_z2 = [], u_z2_sum = [];
+        let harmonics_data = {};
+        for(let k=1; k<=n_harm; k++) {
+            harmonics_data[k] = [];
+        }
+
+        const duration_z2 = T2_sec * 2;
+        for(let i=0; i<=1000; i++) {
+            let cur_t = (i/1000) * duration_z2;
+            t_z2.push(cur_t / uT2.val);
+
+            let sum_val = 0;
+            for(let k=1; k<=n_harm; k++) {
+                let h_amp = harmAmps[k] || 0;
+                let h_val = h_amp * Math.sin(k * w_base2 * cur_t);
+                harmonics_data[k].push(h_val);
+                sum_val += h_val;
+            }
+            u_z2_sum.push(sum_val);
+        }
+
+        let dt_raw = getVal('t3_dt'); if (dt_raw <= 0) dt_raw = 0.001;
+        const udt = getUnitInfo('t3_dt');
+        const dt_sec = dt_raw * udt.val;
+        const fd_Hz = 1 / dt_sec;
+
+        const dt_disp = dt_raw;
+        const uDt_name = udt.name;
+        const fd_disp = 1 / dt_raw;
+        const uFd_name = compFreqUnit[udt.name];
+        const ufd_val = 1 / udt.val;
+
+        let t_samp = [], u_samp = [];
+        for(let k=0; k * dt_sec <= duration_z2 && k <= 5000; k++) {
+            let cur_t = k * dt_sec;
+            t_samp.push(cur_t / uT2.val);
+
+            let sum_val = 0;
+            for(let j=1; j<=n_harm; j++) {
+                let h_amp = harmAmps[j] || 0;
+                sum_val += h_amp * Math.sin(j * w_base2 * cur_t);
+            }
+            u_samp.push(sum_val);
+        }
+
+
+
+        const phi_tex = phi_den === 1 ? `${phi_num}\\pi` : `\\frac{${phi_num}\\pi}{${phi_den}}`;
+        document.getElementById('math-1').innerHTML = String.raw`
+            $$ f = \frac{1}{T} = \frac{1}{${T1_raw} \text{ ${uT1.name}}} = ${f1_disp.toFixed(2)} \text{ ${uF1_name}} \quad \implies \quad \omega = 2\pi f \approx ${(w1).toFixed(1)} \text{ рад/с} $$
+            $$ u(t) = A_0 + A \sin(\omega t + \varphi_0) $$
+            $$ u(t) = ${A0_raw} + ${A_raw} \cdot \sin(${(w1).toFixed(1)} t + ${phi.toFixed(3)}) \text{ } $$
+        `;
+
+        let z2_eq = ``;
+        let harm_calcs = ``;
+        const uF2_name = compFreqUnit[uT2.name];
+        for(let k=1; k<=n_harm; k++) {
+            if(harmAmps[k] > 0 || harmAmps[k] < 0) {
+                if(z2_eq !== `` && harmAmps[k] > 0) z2_eq += ` + `;
+                z2_eq += `${harmAmps[k]} \\sin(${(k*w_base2).toFixed(1)}t)`;
+
+                let Tk_disp = T2_raw / k;
+                let fk_disp = k * (1 / T2_raw);
+                let wk = k * w_base2;
+                harm_calcs += String.raw`$$ T_{${k}} = \frac{T_c}{${k}} = \frac{${T2_raw}}{${k}} = ${Tk_disp.toFixed(2)} \text{ ${uT2.name}}, \quad f_{${k}} = ${k} \cdot f_1 = ${fk_disp.toFixed(2)} \text{ ${uF2_name}}, \quad \omega_{${k}} = ${wk.toFixed(1)} \text{ рад/с} $$`;
+            }
+        }
+        if (z2_eq === ``) z2_eq = `0`;
+
+        document.getElementById('math-2').innerHTML = String.raw`
+            ${harm_calcs}
+            $$ s(t) = \sum_{k=1}^{N} A_k \sin(k \omega_1 t) $$
+            $$ s(t) = ${z2_eq} \text{} $$
+        `;
+
+        let max_k = 1;
+        for(let k=n_harm; k>=1; k--) {
+            if(harmAmps[k] !== 0) { max_k = k; break; }
+        }
+        const f_max_Hz = max_k * f_base2_Hz;
+        const f_max_disp = f_max_Hz / ufd_val;
+        
+        const fd_min_disp = 2 * f_max_disp;
+        const Td_max_sec = 1 / (2 * f_max_Hz);
+        const Td_max_disp = Td_max_sec / udt.val; 
+        
+        const sign_T = dt_sec <= Td_max_sec + 1e-9 ? "\\le" : ">";
+        const sign_f = fd_Hz >= 2 * f_max_Hz - 1e-9 ? "\\ge" : "<";
+        
+        const isKotelnikov = dt_sec <= Td_max_sec + 1e-9;
+        const resultColor = isKotelnikov ? "#16a34a" : "#dc2626";
+        const resultMsg = isKotelnikov 
+            ? "\\text{Условие теоремы Котельникова выполняется. Сигнал можно восстановить по его дискретным отсчётам.}" 
+            : "\\text{Нарушение условия т. Котельникова приведёт к неоднозначному} \\\\ \\text{восстановлению сигнала по дискретным отсчётам.}";
+
+        document.getElementById('math-3-top').innerHTML = String.raw`
+            $$ f_{верх} = f_{max} = ${max_k} \cdot f_1 = ${f_max_disp.toFixed(2)} \text{ ${uFd_name}} $$
+            $$ \text{Теорема Котельникова, записанная в двух формах} $$
+            $$ \begin{array}{c|c}
+            T_д \le \frac{1}{2 f_{верх}} & f_д \ge 2 f_{верх} \\
+            T_д \le \frac{1}{2 \cdot ${f_max_disp.toFixed(2)} \text{ ${uFd_name}}} & f_д \ge 2 \cdot ${f_max_disp.toFixed(2)} \text{ ${uFd_name}} \\
+            T_д \le ${Td_max_disp.toFixed(3)} \text{ ${uDt_name}} & f_д \ge ${fd_min_disp.toFixed(2)} \text{ ${uFd_name}}
+            \end{array} $$
+        `;
+        document.getElementById('math-3-bot').innerHTML = String.raw`
+            $$ f_д = \frac{1}{T_д} = \frac{1}{${dt_disp.toFixed(3)} \text{ ${uDt_name}}} = ${fd_disp.toFixed(2)} \text{ ${uFd_name}} $$
+            $$ ${dt_disp.toFixed(3)} \text{ ${uDt_name}} \ ${sign_T} \ ${Td_max_disp.toFixed(3)} \text{ ${uDt_name}} \quad \text{и} \quad ${fd_disp.toFixed(2)} \text{ ${uFd_name}} \ ${sign_f} \ ${fd_min_disp.toFixed(2)} \text{ ${uFd_name}} $$
+            $$ \color{${resultColor}}{\begin{array}{c} ${resultMsg} \end{array}} $$
+        `;
+
+        renderMath();
+
+
+
+        const layout_axes = { zeroline: true, zerolinecolor: '#000', zerolinewidth: 2, showline: true, linecolor: '#000', linewidth: 1 };
+
+        const layout_base1 = {
+            margin: {t:30, b:40, l:50, r:20},
+            xaxis: { title: `Время t, ${uT1.name}`, ...layout_axes, range: [0, T1_raw * 3] },
+            yaxis: { title: `Амплитуда, ${uA.name}`, ...layout_axes }
+        };
+
+        const layout_base2 = {
+            margin: {t:30, b:40, l:50, r:20},
+            xaxis: { title: `Время t, ${uT2.name}`, ...layout_axes, range: [0, T2_raw * 2] },
+            yaxis: { title: `Амплитуда, мВ`, ...layout_axes }
+        };
+
+
+        Plotly.react('plot-1-time', [{ x: t_z1, y: u_z1, line: {color:'#2563eb', width: 2.5}, name: 'u(t)' }], {...layout_base1, title: 'Временная диаграмма u(t)'});
+
+
+        let spec_x = [0, 0, null, f1_disp, f1_disp];
+        let spec_y = [0, A0_raw, null, 0, A_raw];
+        Plotly.react('plot-1-spec', [
+            { x: spec_x, y: spec_y, type: 'scatter', mode: 'lines', line: {color: '#dc0000', width: 4}, name: 'Амплитуда' }
+        ], {
+            margin: {t:30, b:40, l:50, r:20},
+            title: 'Амплитудно-частотный спектр (АЧС)',
+            xaxis: {title: `Частота, ${uF1_name}`, rangemode: 'tozero', ...layout_axes, range: [0, f1_disp*1.5]},
+            yaxis: {title: `Амплитуда, ${uA.name}`, rangemode: 'tozero', ...layout_axes}
+        });
+
+
+        let traces_z2 = [];
+        const colors = ['#f59e0b', '#10b981', '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16', '#eab308'];
+
+        for(let k=1; k<=n_harm; k++) {
+            if(harmAmps[k] !== 0) {
+                traces_z2.push({
+                    x: t_z2,
+                    y: harmonics_data[k],
+                    line: {color: colors[(k-1)%colors.length], width: 1.5, dash: 'dot'},
+                    name: `${k}-я гарм.`
+                });
+            }
+        }
+        traces_z2.push({
+            x: t_z2,
+            y: u_z2_sum,
+            line: {color:'#2563eb', width: 2.5},
+            name: 'Сумма s(t)'
+        });
+
+        Plotly.react('plot-2-time', traces_z2, {...layout_base2, title: 'Суперпозиция гармоник и результирующий сигнал s(t)'});
+
+
+        Plotly.react('plot-3-analog', [
+            { x: t_z2, y: u_z2_sum, line: {color:'#2563eb', width: 2.5}, name: 'Сигнал S(t)' }
+        ], {...layout_base2, title: 'Периодический сигнал до дискретизации', showlegend: false});
+
+
+        let plot3_traces = [];
+        if (isKotelnikov) {
+            plot3_traces.push({ x: t_z2, y: u_z2_sum, type: 'scatter', mode: 'lines', line: {color: 'rgba(80,80,80,0.5)', width: 1.5, dash: '10px, 15px'}, name: 'Аналоговый s(t)', hoverinfo: 'skip' });
+        } else {
+            // Отрисовка красной сглаженной кривой (сплайна) по дискретным отсчетам при нарушении теоремы
+            plot3_traces.push({ x: t_samp, y: u_samp, type: 'scatter', mode: 'lines', line: {color: '#dc2626', width: 2.5, dash: 'dash', shape: 'spline'}, name: 'Алиасинг (ложный сигнал)', hoverinfo: 'skip' });
+        }
+        plot3_traces.push({ x: t_samp, y: u_samp, type: 'bar', marker: { color: '#10b981', line: {color: '#065f46', width: 1} }, width: (dt_sec/uT2.val) * 0.05, name: 'Отсчеты x_n' });
+
+        Plotly.react('plot-3-time', plot3_traces, {...layout_base2, title: 'Дискретизация сигнала (Отсчеты)', showlegend: false});
+    }
+
+    window.onload = function() {
+        setupMagnitudeSpinners();
+        initSliders();
+    };
+</script>
+
+</body>
+</html>
