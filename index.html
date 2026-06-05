@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta
+      name="description"
+      content="Интерактивная визуализация системы передачи аналоговой информации с АЦП"
+    >
+    <title>Система передачи информации с АЦП</title>
+    <link rel="stylesheet" href="styles.css">
+    <script>
+      window.MathJax = {
+        tex: {
+          inlineMath: [["\\(", "\\)"]],
+          displayMath: [["\\[", "\\]"]],
+        },
+        startup: {
+          typeset: false,
+        },
+      };
+    </script>
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"
+    ></script>
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="page-shell site-header__inner">
+        <a class="brand" href="#top" aria-label="Перейти в начало страницы">
+          <span class="brand__mark">ОТС</span>
+          <span class="brand__text">
+            <strong>Система передачи информации</strong>
+            <small>Курсовая работа · интерактивная визуализация</small>
+          </span>
+        </a>
+
+        <nav class="site-nav" aria-label="Навигация по странице">
+          <a href="#parameters">Параметры</a>
+          <a href="#scheme">Схема</a>
+          <a href="#workspace">Рабочая область</a>
+          <a href="docs/PROJECT_CONTEXT.md">Контекст</a>
+          <a href="docs/IMPLEMENTATION_LOG.md">Журнал</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <div class="page-shell hero__grid">
+          <div>
+            <p class="eyebrow">Общая теория связи</p>
+            <h1>Путь аналогового сообщения через цифровую систему связи</h1>
+            <p class="hero__lead">
+              Приложение будет последовательно показывать, как меняется
+              сигнал: от источника сообщения до восстановления у получателя.
+            </p>
+
+            <div class="hero__actions">
+              <a class="button button--primary" href="#parameters">
+                Задать исходные данные
+              </a>
+              <a class="button button--secondary" href="docs/IMPLEMENTATION_LOG.md">
+                Посмотреть журнал
+              </a>
+            </div>
+          </div>
+
+          <aside class="hero-card" aria-label="Текущее состояние проекта">
+            <p class="eyebrow">Этап разработки</p>
+            <strong>Исходные данные подключены</strong>
+            <p>
+              Параметры из задания уже можно вводить вручную. Следующие
+              расчётные блоки будут добавляться по очереди после сверки с
+              методическими указаниями.
+            </p>
+            <span class="status-pill">Блок 01 готов</span>
+          </aside>
+        </div>
+      </section>
+
+      <section class="section page-shell" id="parameters">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Блок 01 · исходные данные</p>
+            <h2>Параметры варианта</h2>
+          </div>
+          <p>
+            Заполните значения из своего задания. Форма задаёт условия для
+            всех следующих расчётов и обновляет сводку сразу после ввода.
+          </p>
+        </div>
+
+        <div class="parameters-layout">
+          <form class="parameters-form" data-parameters-form>
+            <div class="variant-picker">
+              <label class="field">
+                <span>Готовый вариант из таблицы</span>
+                <small>
+                  Выберите номер задания или оставьте ручной режим.
+                </small>
+                <select name="variantPreset" data-variant-preset>
+                  <option value="custom">Ручной ввод</option>
+                </select>
+              </label>
+
+              <p>
+                После выбора варианта все поля заполнятся автоматически.
+                Любое ручное изменение вернёт форму в свободный режим.
+              </p>
+            </div>
+
+            <fieldset class="parameters-group">
+              <legend>Источник сообщения</legend>
+              <p>Статистические характеристики исходного процесса.</p>
+
+              <div class="form-grid">
+                <label class="field">
+                  <span>P<sub>g</sub> = σ<sub>g</sub><sup>2</sup></span>
+                  <small>Мощность первичного сигнала, В²</small>
+                  <input
+                    name="signalPower"
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value="1.5"
+                    required
+                  >
+                </label>
+
+                <label class="field">
+                  <span>β</span>
+                  <small>Показатель затухания, мс⁻¹</small>
+                  <input
+                    name="beta"
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value="14"
+                    required
+                  >
+                </label>
+
+                <label class="field">
+                  <span>k = Δf<sub>g</sub> / β</span>
+                  <small>Коэффициент из функции корреляции</small>
+                  <input
+                    name="bandwidthFactor"
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value="2"
+                    required
+                  >
+                </label>
+
+                <label class="field">
+                  <span>Δf<sub>g</sub> = kβ</span>
+                  <small>Расчётная ширина спектра первичного сигнала</small>
+                  <input
+                    name="signalBandwidth"
+                    type="number"
+                    value="28"
+                    readonly
+                  >
+                </label>
+
+                <label class="field field--wide correlation-editor">
+                  <span>B<sub>c</sub>(τ) в формате LaTeX</span>
+                  <small>
+                    Формула из задания. Ниже отображается живой предпросмотр.
+                  </small>
+                  <textarea
+                    name="correlationFunction"
+                    rows="3"
+                    required
+                  >B_c(\tau) = P_g \cdot e^{-\beta |\tau|}, \quad -\infty &lt; \tau &lt; \infty</textarea>
+                </label>
+
+                <div class="formula-preview field--full">
+                  <span>Предпросмотр корреляционной функции</span>
+                  <div data-correlation-preview></div>
+                </div>
+              </div>
+            </fieldset>
+
+            <fieldset class="parameters-group">
+              <legend>АЦП и передающее устройство</legend>
+              <p>Частота дискретизации и способ модуляции несущей.</p>
+
+              <div class="form-grid">
+                <label class="field">
+                  <span>α</span>
+                  <small>Коэффициент повышения частоты дискретизации</small>
+                  <input
+                    name="samplingIncrease"
+                    type="number"
+                    min="1"
+                    step="0.1"
+                    value="2"
+                    required
+                  >
+                </label>
+
+                <label class="field">
+                  <span>Способ передачи</span>
+                  <small>Вид дискретной модуляции</small>
+                  <select name="modulation" required>
+                    <option value="DAM">ДАМ · амплитудная</option>
+                    <option value="DCHM" selected>ДЧМ · частотная</option>
+                    <option value="DOFM">ДОФМ · относительная фазовая</option>
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span data-primary-frequency-label>f<sub>2</sub></span>
+                  <small data-primary-frequency-description>
+                    Нижняя несущая частота, МГц
+                  </small>
+                  <input
+                    name="primaryFrequency"
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value="61"
+                    required
+                  >
+                </label>
+
+                <label class="field" data-secondary-frequency-field>
+                  <span>f<sub>1</sub></span>
+                  <small>Верхняя несущая частота, МГц</small>
+                  <input
+                    name="secondaryFrequency"
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value="62.5"
+                    required
+                  >
+                </label>
+              </div>
+            </fieldset>
+
+            <fieldset class="parameters-group">
+              <legend>Канал и приёмное устройство</legend>
+              <p>Шум канала, требуемое качество и способ обработки.</p>
+
+              <div class="form-grid">
+                <label class="field">
+                  <span>N<sub>0</sub></span>
+                  <small>Спектральная плотность мощности шума, мВт/Гц</small>
+                  <input
+                    name="noiseDensity"
+                    type="number"
+                    min="0"
+                    step="0.0001"
+                    value="0.001"
+                    required
+                  >
+                </label>
+
+                <label class="field">
+                  <span>h<sup>2</sup></span>
+                  <small>Требуемое отношение сигнал/шум</small>
+                  <input
+                    name="signalNoiseRatio"
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value="8.5"
+                    required
+                  >
+                </label>
+
+                <label class="field">
+                  <span>Способ приёма</span>
+                  <small>Зависит от выбранной модуляции</small>
+                  <select name="reception" data-initial-value="NO" required></select>
+                  <em class="field-help" data-reception-description></em>
+                </label>
+
+                <label class="field">
+                  <span>δ<sub>доп</sub><sup>2</sup></span>
+                  <small>Допустимая относительная СКО восстановления</small>
+                  <input
+                    name="acceptableError"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value="0.12"
+                    required
+                  >
+                </label>
+              </div>
+            </fieldset>
+          </form>
+
+          <aside class="parameters-summary" aria-live="polite">
+            <div>
+              <p class="eyebrow">Текущая конфигурация</p>
+              <h3 data-summary-title></h3>
+              <p data-summary-description></p>
+            </div>
+
+            <dl class="summary-list" data-parameters-summary></dl>
+
+            <div class="summary-formulas">
+              <div>
+                <span>Корреляционная функция</span>
+                <div data-summary-correlation-formula></div>
+              </div>
+              <div>
+                <span>Ширина спектра</span>
+                <div data-summary-bandwidth-formula></div>
+              </div>
+            </div>
+
+            <p class="reception-note" data-summary-reception-description></p>
+
+            <p class="summary-note">
+              Исходные данные не преобразуют сигнал, поэтому график появится
+              в следующем блоке: «Источник и первичный преобразователь».
+            </p>
+          </aside>
+        </div>
+      </section>
+
+      <section class="section page-shell" id="scheme">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Структурная схема</p>
+            <h2>Маршрут сигнала</h2>
+          </div>
+          <p>
+            Нажмите на этап, чтобы открыть его рабочую карточку. Пока все
+            расчётные этапы находятся в режиме подготовки.
+          </p>
+        </div>
+
+        <div class="scheme-legend" aria-label="Обозначения групп схемы">
+          <span><i class="legend-dot legend-dot--source"></i>Источник</span>
+          <span><i class="legend-dot legend-dot--tx"></i>Передача и АЦП</span>
+          <span><i class="legend-dot legend-dot--channel"></i>Канал связи</span>
+          <span><i class="legend-dot legend-dot--rx"></i>Приём и ЦАП</span>
+        </div>
+
+        <div class="signal-route" data-signal-route aria-label="Этапы прохождения сигнала"></div>
+      </section>
+
+      <section class="section section--workspace" id="workspace">
+        <div class="page-shell">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Рабочая область</p>
+              <h2>Карточка выбранного этапа</h2>
+            </div>
+            <p>
+              Здесь появятся теория, формулы, расчёты и графики после
+              исследования соответствующего раздела методических указаний.
+            </p>
+          </div>
+
+          <article class="stage-panel" data-stage-panel aria-live="polite"></article>
+        </div>
+      </section>
+
+      <section class="section page-shell">
+        <article class="workflow-note">
+          <div class="workflow-note__number">01</div>
+          <div>
+            <p class="eyebrow">Правило реализации</p>
+            <h2>Сначала методичка, затем код</h2>
+            <p>
+              Перед каждым новым блоком фиксируем физический смысл,
+              используемые формулы, входной и выходной сигналы. После этого
+              добавляем минимум один график преобразования и проверяем
+              страницу в браузере.
+            </p>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="page-shell site-footer__inner">
+        <span>Учебная визуализация по дисциплине «Общая теория связи»</span>
+        <span>Каркас проекта · <span data-current-year></span></span>
+      </div>
+    </footer>
+  </body>
+</html>
