@@ -384,6 +384,163 @@
       </section>
     </main>
 
+    <template id="template-stage-source">
+      <div class="stage-panel__content">
+        <p class="eyebrow">Этап 01</p>
+        <h2 data-title></h2>
+        <span class="stage-panel__signal" data-signal></span>
+        <div class="stage-layout">
+          <div class="stage-math">
+            <p>Моделирование исходного аналогового сообщения как гауссовского стационарного процесса.</p>
+            <div class="formula-preview">
+              <span>Автокорреляционная функция B_c(τ)</span>
+              <div data-math-bc></div>
+            </div>
+            <div class="formula-preview">
+              <span>Мощность сигнала</span>
+              <div data-math-pg></div>
+            </div>
+            <div class="formula-preview">
+              <span>Спектр плотности мощности по Винеру-Хинчину</span>
+              <div data-math-gg></div>
+            </div>
+          </div>
+          <div class="stage-visuals">
+            <div class="canvas-wrapper"><canvas id="canvas-source-g"></canvas></div>
+            <div class="canvas-wrapper"><canvas id="canvas-source-bc"></canvas></div>
+            <div class="canvas-wrapper"><canvas id="canvas-source-gg"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <template id="template-stage-tx-filter">
+      <div class="stage-panel__content">
+        <p class="eyebrow">Этап 02</p>
+        <h2 data-title></h2>
+        <span class="stage-panel__signal" data-signal></span>
+        <div class="stage-layout">
+          <div class="stage-math">
+            <p>Ограничение ширины спектра идеальным ФНЧ для подготовки к дискретизации.</p>
+            <div class="formula-preview">
+              <span>Частота среза ФНЧ</span>
+              <div data-math-fcp></div>
+            </div>
+            <div class="formula-preview">
+              <span>Мощность отфильтрованного сигнала</span>
+              <div data-math-px></div>
+            </div>
+            <div class="formula-preview">
+              <span>СКО ошибки фильтрации</span>
+              <div data-math-eps></div>
+            </div>
+          </div>
+          <div class="stage-visuals">
+            <div class="canvas-wrapper"><canvas id="canvas-tx-spec"></canvas></div>
+            <div class="canvas-wrapper"><canvas id="canvas-tx-x"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <template id="template-stage-sampler">
+      <div class="stage-panel__content">
+        <p class="eyebrow">Этап 03</p>
+        <h2 data-title></h2>
+        <span class="stage-panel__signal" data-signal></span>
+        <div class="stage-layout">
+          <div class="stage-math">
+            <p>Дискретизация непрерывного сигнала по времени в соответствии с теоремой Котельникова.</p>
+            <div class="formula-preview">
+              <span>Частота дискретизации</span>
+              <div data-math-fd></div>
+            </div>
+            <div class="formula-preview">
+              <span>Интервал дискретизации</span>
+              <div data-math-dt></div>
+            </div>
+          </div>
+          <div class="stage-visuals">
+            <div class="canvas-wrapper"><canvas id="canvas-sampler-delta"></canvas></div>
+            <div class="canvas-wrapper"><canvas id="canvas-sampler-x"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <template id="template-stage-quantizer">
+      <div class="stage-panel__content">
+        <p class="eyebrow">Этап 04</p>
+        <h2 data-title></h2>
+        <span class="stage-panel__signal" data-signal></span>
+        <div class="stage-layout">
+          <div class="stage-math">
+            <p>Квантование отсчетов по уровню с равномерным шагом (выбрано 16 уровней для визуализации).</p>
+            <div class="formula-preview">
+              <span>Динамический диапазон</span>
+              <div data-math-dg></div>
+            </div>
+            <div class="formula-preview">
+              <span>Шаг квантования</span>
+              <div data-math-du></div>
+            </div>
+          </div>
+          <div class="stage-visuals">
+            <div class="canvas-wrapper"><canvas id="canvas-quantizer-char"></canvas></div>
+            <div class="canvas-wrapper"><canvas id="canvas-quantizer-v"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <template id="template-stage-encoder">
+      <div class="stage-panel__content">
+        <p class="eyebrow">Этап 05</p>
+        <h2 data-title></h2>
+        <span class="stage-panel__signal" data-signal></span>
+        <div class="stage-layout">
+          <div class="stage-math">
+            <p>Преобразование квантованных уровней в безызбыточный двоичный код.</p>
+            <div class="formula-preview">
+              <span>Разрядность кодера</span>
+              <div data-math-mu></div>
+            </div>
+            <div class="formula-preview">
+              <span>Длительность символа</span>
+              <div data-math-tau></div>
+            </div>
+          </div>
+          <div class="stage-visuals">
+            <div class="canvas-wrapper"><canvas id="canvas-encoder-b"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <template id="template-stage-modulator">
+      <div class="stage-panel__content">
+        <p class="eyebrow">Этап 06</p>
+        <h2 data-title></h2>
+        <span class="stage-panel__signal" data-signal></span>
+        <div class="stage-layout">
+          <div class="stage-math">
+            <p>Модуляция (манипуляция) гармонической несущей цифровым сигналом. В визуализации частота несущей снижена для наглядности.</p>
+            <div class="formula-preview">
+              <span>Способ передачи</span>
+              <div data-math-mod></div>
+            </div>
+            <div class="formula-preview">
+              <span>Частота несущей</span>
+              <div data-math-f0></div>
+            </div>
+          </div>
+          <div class="stage-visuals">
+            <div class="canvas-wrapper"><canvas id="canvas-modulator-s"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </template>
+
     <footer class="site-footer">
       <div class="page-shell site-footer__inner">
         <span>Учебная визуализация по дисциплине «Общая теория связи»</span>

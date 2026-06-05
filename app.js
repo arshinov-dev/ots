@@ -264,12 +264,14 @@ class SignalProcessor {
   calculateFilter() {
     const fcp = this.dfg;
     let Px = 0;
+    const totalGg = this.Gg.reduce((a, b) => a + b, 0);
+    const normFactor = totalGg > 0 ? Math.sqrt(this.Pg / (totalGg * this.df * 2)) : 0;
     
     this.x_t = this.time.map((t, tIdx) => {
       let val = 0;
       for (let i = 0; i < this.frequencies.length; i++) {
         if (this.frequencies[i] <= fcp) {
-          const A = Math.sqrt(2 * this.Gg[i] * this.df) * Math.sqrt(this.Pg / (this.Gg.reduce((a,b)=>a+b)*this.df*2));
+          const A = Math.sqrt(2 * this.Gg[i] * this.df) * normFactor;
           val += A * Math.cos(2 * Math.PI * this.frequencies[i] * t + this.phases[i]);
           if (tIdx === 0) {
              Px += 2 * this.Gg_normalized[i] * this.df;
@@ -385,7 +387,7 @@ const CanvasRenderer = {
     return { ctx, w: rect.width, h: rect.height };
   },
   
-  drawTimeGrid(ctx, w, h) {
+  drawTimeAxis(ctx, w, h) {
     ctx.beginPath();
     ctx.strokeStyle = '#d5ddd8';
     ctx.lineWidth = 1;
@@ -433,6 +435,51 @@ const CanvasRenderer = {
     }
     ctx.lineTo(w, h - 10);
     ctx.stroke();
+  },
+
+  drawSpectrumCutoff(ctx, w, h, freqs, Gg, fcp, colorPass, colorCut) {
+    const maxF = freqs[freqs.length - 1];
+    const maxG = Math.max(...Gg) * 1.1 || 1;
+    const baseline = h - 10;
+
+    ctx.beginPath();
+    ctx.strokeStyle = '#d5ddd8';
+    ctx.moveTo(0, baseline); ctx.lineTo(w, baseline);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.fillStyle = colorPass + '40';
+    ctx.moveTo(0, baseline);
+    let cutoffX = 0;
+    for (let i = 0; i < freqs.length; i++) {
+      if (freqs[i] <= fcp) {
+        const x = (freqs[i] / maxF) * w;
+        const y = baseline - (Gg[i] / maxG) * (baseline - 10);
+        ctx.lineTo(x, y);
+        cutoffX = x;
+      }
+    }
+    ctx.lineTo(cutoffX, baseline);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.fillStyle = colorCut + '40';
+    ctx.moveTo(cutoffX, baseline);
+    for (let i = 0; i < freqs.length; i++) {
+      if (freqs[i] > fcp) {
+        const x = (freqs[i] / maxF) * w;
+        const y = baseline - (Gg[i] / maxG) * (baseline - 10);
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.lineTo(w, baseline);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.strokeStyle = colorCut;
+    ctx.setLineDash([5, 5]);
+    ctx.moveTo(cutoffX, baseline); ctx.lineTo(cutoffX, 10);
+    ctx.stroke(); ctx.setLineDash([]);
   },
 
   drawStems(ctx, w, h, timeArray, sampledTime, sampledValues, color, arrowsOnly = false) {
@@ -620,50 +667,32 @@ function renderPanel(stage) {
 function renderSourceStage(stage) {
   const p = currentProcessor;
   panel.dataset.group = stage.group;
-  panel.innerHTML = `
-    <div class="stage-panel__content">
-      <p class="eyebrow">Этап 01</p>
-      <h2>${stage.title}</h2>
-      <span class="stage-panel__signal">${stage.signal}</span>
-      <div class="stage-layout">
-        <div class="stage-math">
-          <p>Моделирование исходного аналогового сообщения как гауссовского стационарного процесса.</p>
-          <div class="formula-preview">
-            <span>Автокорреляционная функция B_c(τ)</span>
-            <div>\\[ ${p.params.correlationFunction} \\]</div>
-          </div>
-          <div class="formula-preview">
-            <span>Мощность сигнала</span>
-            <div>\\[ P_g = \\sigma_g^2 = ${toLatexNumber(p.Pg.toFixed(2))} \\text{ В}^2 \\]</div>
-          </div>
-          <div class="formula-preview">
-            <span>Спектр плотности мощности по Винеру-Хинчину</span>
-            <div>\\[ G_g(f) = 4 \\int_0^\\infty B_c(\\tau) \\cos(2\\pi f \\tau) d\\tau \\]</div>
-          </div>
-        </div>
-        <div class="stage-visuals">
-          <div class="canvas-wrapper"><canvas id="canvas-source-g"></canvas></div>
-          <div class="canvas-wrapper"><canvas id="canvas-source-bc"></canvas></div>
-          <div class="canvas-wrapper"><canvas id="canvas-source-gg"></canvas></div>
-        </div>
-      </div>
-    </div>
-  `;
+  
+  const template = document.getElementById("template-stage-source");
+  const clone = template.content.cloneNode(true);
+  
+  clone.querySelector("[data-title]").textContent = stage.title;
+  clone.querySelector("[data-signal]").textContent = stage.signal;
+  
+  setFormula(clone.querySelector("[data-math-bc]"), p.params.correlationFunction);
+  setFormula(clone.querySelector("[data-math-pg]"), String.raw`P_g = \sigma_g^2 = ${toLatexNumber(p.Pg.toFixed(2))} \text{ В}^2`);
+  setFormula(clone.querySelector("[data-math-gg]"), String.raw`G_g(f) = 4 \int_0^\infty B_c(\tau) \cos(2\pi f \tau) d\tau`);
+
+  panel.replaceChildren(clone);
   renderMath();
   
-  // Отрисовка графиков Блока 1
   setTimeout(() => {
-    const cg = CanvasRenderer.setup(document.getElementById('canvas-source-g'));
-    CanvasRenderer.drawTimeGrid(cg.ctx, cg.w, cg.h);
+    const cg = CanvasRenderer.setup(panel.querySelector('#canvas-source-g'));
+    CanvasRenderer.drawTimeAxis(cg.ctx, cg.w, cg.h);
     CanvasRenderer.drawSignal(cg.ctx, cg.w, cg.h, p.time, p.g_t, '#0c6b4f');
 
-    const cbc = CanvasRenderer.setup(document.getElementById('canvas-source-bc'));
-    CanvasRenderer.drawTimeGrid(cbc.ctx, cbc.w, cbc.h);
+    const cbc = CanvasRenderer.setup(panel.querySelector('#canvas-source-bc'));
+    CanvasRenderer.drawTimeAxis(cbc.ctx, cbc.w, cbc.h);
     const taus = Array.from({length: 200}, (_, i) => (i - 100) * (3 / p.beta / 100));
     const bcVals = taus.map(t => p.Bc(t));
     CanvasRenderer.drawSignal(cbc.ctx, cbc.w, cbc.h, taus, bcVals, '#287c9f');
 
-    const cgg = CanvasRenderer.setup(document.getElementById('canvas-source-gg'));
+    const cgg = CanvasRenderer.setup(panel.querySelector('#canvas-source-gg'));
     CanvasRenderer.drawSpectrum(cgg.ctx, cgg.w, cgg.h, p.frequencies, p.Gg_normalized, '#ad6d13');
   }, 50);
 }
@@ -671,53 +700,27 @@ function renderSourceStage(stage) {
 function renderTxFilterStage(stage) {
   const p = currentProcessor;
   panel.dataset.group = stage.group;
-  panel.innerHTML = `
-    <div class="stage-panel__content">
-      <p class="eyebrow">Этап 02</p>
-      <h2>${stage.title}</h2>
-      <span class="stage-panel__signal">${stage.signal}</span>
-      <div class="stage-layout">
-        <div class="stage-math">
-          <p>Ограничение ширины спектра идеальным ФНЧ для подготовки к дискретизации.</p>
-          <div class="formula-preview">
-            <span>Частота среза ФНЧ</span>
-            <div>\\[ f_{cp} = \\Delta f_g = ${toLatexNumber(p.dfg.toFixed(2))} \\text{ кГц} \\]</div>
-          </div>
-          <div class="formula-preview">
-            <span>Мощность отфильтрованного сигнала</span>
-            <div>\\[ P_x = \\int_0^{f_{cp}} 2 G_g(f) df = ${toLatexNumber(p.Px.toFixed(3))} \\text{ В}^2 \\]</div>
-          </div>
-          <div class="formula-preview">
-            <span>СКО ошибки фильтрации</span>
-            <div>\\[ \\varepsilon_ф^2 = P_g - P_x = ${toLatexNumber(p.Pg.toFixed(3))} - ${toLatexNumber(p.Px.toFixed(3))} = ${toLatexNumber(p.eps_f2.toFixed(3))} \\text{ В}^2 \\]</div>
-          </div>
-        </div>
-        <div class="stage-visuals">
-          <div class="canvas-wrapper"><canvas id="canvas-tx-spec"></canvas></div>
-          <div class="canvas-wrapper"><canvas id="canvas-tx-x"></canvas></div>
-        </div>
-      </div>
-    </div>
-  `;
+
+  const template = document.getElementById("template-stage-tx-filter");
+  const clone = template.content.cloneNode(true);
+
+  clone.querySelector("[data-title]").textContent = stage.title;
+  clone.querySelector("[data-signal]").textContent = stage.signal;
+
+  setFormula(clone.querySelector("[data-math-fcp]"), String.raw`f_{cp} = \Delta f_g = ${toLatexNumber(p.dfg.toFixed(2))} \text{ кГц}`);
+  setFormula(clone.querySelector("[data-math-px]"), String.raw`P_x = \int_0^{f_{cp}} 2 G_g(f) df = ${toLatexNumber(p.Px.toFixed(3))} \text{ В}^2`);
+  setFormula(clone.querySelector("[data-math-eps]"), String.raw`\varepsilon_ф^2 = P_g - P_x = ${toLatexNumber(p.Pg.toFixed(3))} - ${toLatexNumber(p.Px.toFixed(3))} = ${toLatexNumber(p.eps_f2.toFixed(3))} \text{ В}^2`);
+
+  panel.replaceChildren(clone);
   renderMath();
   
-  // Отрисовка графиков Блока 2
   setTimeout(() => {
-    // График спектра с отсечением
-    const cspec = CanvasRenderer.setup(document.getElementById('canvas-tx-spec'));
-    CanvasRenderer.drawSpectrum(cspec.ctx, cspec.w, cspec.h, p.frequencies, p.Gg_normalized, '#ad6d13');
-    const limitX = (p.dfg / p.frequencies[p.frequencies.length - 1]) * cspec.w;
-    cspec.ctx.beginPath();
-    cspec.ctx.strokeStyle = '#e74c3c';
-    cspec.ctx.moveTo(limitX, 0); cspec.ctx.lineTo(limitX, cspec.h);
-    cspec.ctx.stroke();
+    const cspec = CanvasRenderer.setup(panel.querySelector('#canvas-tx-spec'));
+    CanvasRenderer.drawSpectrumCutoff(cspec.ctx, cspec.w, cspec.h, p.frequencies, p.Gg_normalized, p.dfg, '#0c6b4f', '#e74c3c');
 
-    // График x(t) поверх g(t)
-    const cx = CanvasRenderer.setup(document.getElementById('canvas-tx-x'));
-    CanvasRenderer.drawTimeGrid(cx.ctx, cx.w, cx.h);
-    // Оригинал g(t)
+    const cx = CanvasRenderer.setup(panel.querySelector('#canvas-tx-x'));
+    CanvasRenderer.drawTimeAxis(cx.ctx, cx.w, cx.h);
     CanvasRenderer.drawSignal(cx.ctx, cx.w, cx.h, p.time, p.g_t, 'rgba(40, 124, 159, 0.4)');
-    // Отфильтрованный x(t)
     CanvasRenderer.drawSignal(cx.ctx, cx.w, cx.h, p.time, p.x_t, '#0c6b4f');
   }, 50);
 }
@@ -725,39 +728,25 @@ function renderTxFilterStage(stage) {
 function renderSamplerStage(stage) {
   const p = currentProcessor;
   panel.dataset.group = stage.group;
-  panel.innerHTML = `
-    <div class="stage-panel__content">
-      <p class="eyebrow">Этап 03</p>
-      <h2>${stage.title}</h2>
-      <span class="stage-panel__signal">${stage.signal}</span>
-      <div class="stage-layout">
-        <div class="stage-math">
-          <p>Дискретизация непрерывного сигнала по времени в соответствии с теоремой Котельникова.</p>
-          <div class="formula-preview">
-            <span>Частота дискретизации</span>
-            <div>\\[ f_d = 2 \\alpha \\Delta f_g = 2 \\cdot ${p.params.samplingIncrease} \\cdot ${p.dfg.toFixed(2)} = ${p.fd.toFixed(2)} \\text{ кГц} \\]</div>
-          </div>
-          <div class="formula-preview">
-            <span>Интервал дискретизации</span>
-            <div>\\[ \\Delta t = \\frac{1}{f_d} = \\frac{1}{${p.fd.toFixed(2)}} \\approx ${(p.dt_sample * 1000).toFixed(4)} \\text{ мс} \\]</div>
-          </div>
-        </div>
-        <div class="stage-visuals">
-          <div class="canvas-wrapper"><canvas id="canvas-sampler-delta"></canvas></div>
-          <div class="canvas-wrapper"><canvas id="canvas-sampler-x"></canvas></div>
-        </div>
-      </div>
-    </div>
-  `;
+
+  const template = document.getElementById("template-stage-sampler");
+  const clone = template.content.cloneNode(true);
+
+  clone.querySelector("[data-title]").textContent = stage.title;
+  clone.querySelector("[data-signal]").textContent = stage.signal;
+  setFormula(clone.querySelector("[data-math-fd]"), String.raw`f_d = 2\alpha\Delta f_g = 2 \cdot ${toLatexNumber(p.params.samplingIncrease)} \cdot ${toLatexNumber(p.dfg.toFixed(2))} = ${toLatexNumber(p.fd.toFixed(2))} \text{ кГц}`);
+  setFormula(clone.querySelector("[data-math-dt]"), String.raw`\Delta t = \frac{1}{f_d} = \frac{1}{${toLatexNumber(p.fd.toFixed(2))}} \approx ${toLatexNumber((p.dt_sample * 1000).toFixed(4))} \text{ мс}`);
+
+  panel.replaceChildren(clone);
   renderMath();
 
   setTimeout(() => {
-    const cdelta = CanvasRenderer.setup(document.getElementById('canvas-sampler-delta'));
-    CanvasRenderer.drawTimeGrid(cdelta.ctx, cdelta.w, cdelta.h);
+    const cdelta = CanvasRenderer.setup(panel.querySelector('#canvas-sampler-delta'));
+    CanvasRenderer.drawTimeAxis(cdelta.ctx, cdelta.w, cdelta.h);
     CanvasRenderer.drawStems(cdelta.ctx, cdelta.w, cdelta.h, p.time, p.sampled_time, p.sampled_x.map(() => 1), '#287c9f', true);
 
-    const cx = CanvasRenderer.setup(document.getElementById('canvas-sampler-x'));
-    CanvasRenderer.drawTimeGrid(cx.ctx, cx.w, cx.h);
+    const cx = CanvasRenderer.setup(panel.querySelector('#canvas-sampler-x'));
+    CanvasRenderer.drawTimeAxis(cx.ctx, cx.w, cx.h);
     CanvasRenderer.drawSignal(cx.ctx, cx.w, cx.h, p.time, p.x_t, 'rgba(40, 124, 159, 0.4)');
     CanvasRenderer.drawStems(cx.ctx, cx.w, cx.h, p.time, p.sampled_time, p.sampled_x, '#0c6b4f');
   }, 50);
@@ -766,35 +755,21 @@ function renderSamplerStage(stage) {
 function renderQuantizerStage(stage) {
   const p = currentProcessor;
   panel.dataset.group = stage.group;
-  panel.innerHTML = `
-    <div class="stage-panel__content">
-      <p class="eyebrow">Этап 04</p>
-      <h2>${stage.title}</h2>
-      <span class="stage-panel__signal">${stage.signal}</span>
-      <div class="stage-layout">
-        <div class="stage-math">
-          <p>Квантование отсчетов по уровню с равномерным шагом (выбрано 16 уровней для визуализации).</p>
-          <div class="formula-preview">
-            <span>Динамический диапазон</span>
-            <div>\\[ D_g = 6\\sigma_g = 6 \\cdot ${Math.sqrt(p.Pg).toFixed(2)} = ${p.Dg.toFixed(2)} \\text{ В} \\]</div>
-          </div>
-          <div class="formula-preview">
-            <span>Шаг квантования</span>
-            <div>\\[ \\Delta U = \\frac{D_g}{L-1} = \\frac{${p.Dg.toFixed(2)}}{${p.L}-1} = ${p.dU.toFixed(3)} \\text{ В} \\]</div>
-          </div>
-        </div>
-        <div class="stage-visuals">
-          <div class="canvas-wrapper"><canvas id="canvas-quantizer-char"></canvas></div>
-          <div class="canvas-wrapper"><canvas id="canvas-quantizer-v"></canvas></div>
-        </div>
-      </div>
-    </div>
-  `;
+
+  const template = document.getElementById("template-stage-quantizer");
+  const clone = template.content.cloneNode(true);
+
+  clone.querySelector("[data-title]").textContent = stage.title;
+  clone.querySelector("[data-signal]").textContent = stage.signal;
+  setFormula(clone.querySelector("[data-math-dg]"), String.raw`D_g = 6\sigma_g = 6 \cdot ${toLatexNumber(Math.sqrt(p.Pg).toFixed(2))} = ${toLatexNumber(p.Dg.toFixed(2))} \text{ В}`);
+  setFormula(clone.querySelector("[data-math-du]"), String.raw`\Delta U = \frac{D_g}{L-1} = \frac{${toLatexNumber(p.Dg.toFixed(2))}}{${p.L}-1} = ${toLatexNumber(p.dU.toFixed(3))} \text{ В}`);
+
+  panel.replaceChildren(clone);
   renderMath();
 
   setTimeout(() => {
-    const cchar = CanvasRenderer.setup(document.getElementById('canvas-quantizer-char'));
-    CanvasRenderer.drawTimeGrid(cchar.ctx, cchar.w, cchar.h);
+    const cchar = CanvasRenderer.setup(panel.querySelector('#canvas-quantizer-char'));
+    CanvasRenderer.drawTimeAxis(cchar.ctx, cchar.w, cchar.h);
     cchar.ctx.beginPath(); cchar.ctx.strokeStyle = '#0c6b4f'; cchar.ctx.lineWidth = 2;
     const stepX = cchar.w / p.L, stepY = cchar.h / p.L;
     for (let i = 0; i < p.L; i++) {
@@ -803,8 +778,8 @@ function renderQuantizerStage(stage) {
     }
     cchar.ctx.stroke();
 
-    const cv = CanvasRenderer.setup(document.getElementById('canvas-quantizer-v'));
-    CanvasRenderer.drawTimeGrid(cv.ctx, cv.w, cv.h);
+    const cv = CanvasRenderer.setup(panel.querySelector('#canvas-quantizer-v'));
+    CanvasRenderer.drawTimeAxis(cv.ctx, cv.w, cv.h);
     cv.ctx.beginPath(); cv.ctx.strokeStyle = '#eef2ee'; cv.ctx.lineWidth = 1;
     const maxVal = Math.max(...p.sampled_x.map(Math.abs)) * 1.2 || 1;
     p.vj.forEach(v => {
@@ -820,77 +795,69 @@ function renderQuantizerStage(stage) {
 function renderEncoderStage(stage) {
   const p = currentProcessor;
   panel.dataset.group = stage.group;
-  panel.innerHTML = `
-    <div class="stage-panel__content">
-      <p class="eyebrow">Этап 05</p>
-      <h2>${stage.title}</h2>
-      <span class="stage-panel__signal">${stage.signal}</span>
-      <div class="stage-layout">
-        <div class="stage-math">
-          <p>Преобразование квантованных уровней в безызбыточный двоичный код.</p>
-          <div class="formula-preview">
-            <span>Разрядность кодера</span>
-            <div>\\[ \\mu = \\log_2(L) = ${p.mu} \\text{ бит} \\]</div>
-          </div>
-          <div class="formula-preview">
-            <span>Длительность символа</span>
-            <div>\\[ \\tau_{сим} = \\frac{\\Delta t}{\\mu} = ${ (p.tau_sim * 1000).toFixed(4) } \\text{ мс} \\]</div>
-          </div>
-        </div>
-        <div class="stage-visuals">
-          <div class="canvas-wrapper"><canvas id="canvas-encoder-b"></canvas></div>
-          <div style="word-break: break-all; font-family: monospace; font-size: 0.8rem; color: var(--accent); padding: 10px; background: #fff; border: 1px solid var(--line); border-radius: var(--radius-sm);">${p.bit_string.slice(0, 128)}...</div>
-        </div>
-      </div>
-    </div>
-  `;
+
+  const template = document.getElementById("template-stage-encoder");
+  const clone = template.content.cloneNode(true);
+
+  clone.querySelector("[data-title]").textContent = stage.title;
+  clone.querySelector("[data-signal]").textContent = stage.signal;
+  setFormula(clone.querySelector("[data-math-mu]"), String.raw`\mu = \log_2(L) = \log_2(${p.L}) = ${p.mu} \text{ бит}`);
+  setFormula(clone.querySelector("[data-math-tau]"), String.raw`\tau_{сим} = \frac{\Delta t}{\mu} = \frac{${toLatexNumber((p.dt_sample * 1000).toFixed(4))}}{${p.mu}} \approx ${toLatexNumber((p.tau_sim * 1000).toFixed(4))} \text{ мс}`);
+
+  panel.replaceChildren(clone);
   renderMath();
 
   setTimeout(() => {
-    const cb = CanvasRenderer.setup(document.getElementById('canvas-encoder-b'));
-    CanvasRenderer.drawTimeGrid(cb.ctx, cb.w, cb.h);
+    const cb = CanvasRenderer.setup(panel.querySelector('#canvas-encoder-b'));
+    CanvasRenderer.drawTimeAxis(cb.ctx, cb.w, cb.h);
+    
     cb.ctx.beginPath(); cb.ctx.strokeStyle = '#0c6b4f'; cb.ctx.lineWidth = 2;
     for (let i = 0; i < p.time.length; i++) {
        const x = (i / (p.time.length - 1)) * cb.w;
-       const y = cb.h / 2 - (p.b_t[i] > 0 ? 0.8 : -0.8) * (cb.h / 2);
+       const y = cb.h / 2 - (p.b_t[i] > 0 ? 0.6 : -0.6) * (cb.h / 2);
        if (i === 0) cb.ctx.moveTo(x, y); 
-       else { const prevY = cb.h / 2 - (p.b_t[i-1] > 0 ? 0.8 : -0.8) * (cb.h / 2); if (prevY !== y) cb.ctx.lineTo(x, prevY); cb.ctx.lineTo(x, y); }
+       else { const prevY = cb.h / 2 - (p.b_t[i-1] > 0 ? 0.6 : -0.6) * (cb.h / 2); if (prevY !== y) cb.ctx.lineTo(x, prevY); cb.ctx.lineTo(x, y); }
     }
     cb.ctx.stroke();
+
+    // Отрисовка битов точно по границам
+    cb.ctx.beginPath(); cb.ctx.strokeStyle = '#d5ddd8'; cb.ctx.lineWidth = 1; cb.ctx.setLineDash([4, 4]);
+    cb.ctx.font = "13px 'SFMono-Regular', Consolas, monospace";
+    cb.ctx.fillStyle = '#0c6b4f';
+    cb.ctx.textAlign = "center";
+    cb.ctx.textBaseline = "middle";
+
+    for (let i = 0; i < p.digital_b.length; i++) {
+       const t = i * p.tau_sim;
+       if (t > p.time[p.time.length - 1]) break;
+       const x = (t / p.time[p.time.length - 1]) * cb.w;
+       cb.ctx.moveTo(x, 10); cb.ctx.lineTo(x, cb.h - 10);
+       const nextT = (i + 1) * p.tau_sim;
+       const centerX = ((t + Math.min(nextT, p.time[p.time.length - 1])) / 2 / p.time[p.time.length - 1]) * cb.w;
+       cb.ctx.fillText(p.digital_b[i], centerX, cb.h - 15);
+    }
+    cb.ctx.stroke(); cb.ctx.setLineDash([]);
   }, 50);
 }
 
 function renderModulatorStage(stage) {
   const p = currentProcessor;
   panel.dataset.group = stage.group;
-  panel.innerHTML = `
-    <div class="stage-panel__content">
-      <p class="eyebrow">Этап 06</p>
-      <h2>${stage.title}</h2>
-      <span class="stage-panel__signal">${stage.signal}</span>
-      <div class="stage-layout">
-        <div class="stage-math">
-          <p>Модуляция (манипуляция) гармонической несущей цифровым сигналом. В визуализации частота несущей снижена для наглядности.</p>
-          <div class="formula-preview">
-            <span>Способ передачи</span>
-            <div>\\[ \\text{${p.params.modulation}} \\]</div>
-          </div>
-          <div class="formula-preview">
-            <span>Частота несущей</span>
-            <div>\\[ f_0 = ${p.params.primaryFrequency} \\text{ МГц} \\]</div>
-          </div>
-        </div>
-        <div class="stage-visuals">
-          <div class="canvas-wrapper"><canvas id="canvas-modulator-s"></canvas></div>
-        </div>
-      </div>
-    </div>
-  `;
+
+  const template = document.getElementById("template-stage-modulator");
+  const clone = template.content.cloneNode(true);
+
+  clone.querySelector("[data-title]").textContent = stage.title;
+  clone.querySelector("[data-signal]").textContent = stage.signal;
+  setFormula(clone.querySelector("[data-math-mod]"), String.raw`\text{${p.params.modulation}}`);
+  setFormula(clone.querySelector("[data-math-f0]"), String.raw`f_0 = ${toLatexNumber(p.params.primaryFrequency)} \text{ МГц}`);
+
+  panel.replaceChildren(clone);
   renderMath();
 
   setTimeout(() => {
-    const cs = CanvasRenderer.setup(document.getElementById('canvas-modulator-s'));
-    CanvasRenderer.drawTimeGrid(cs.ctx, cs.w, cs.h);
+    const cs = CanvasRenderer.setup(panel.querySelector('#canvas-modulator-s'));
+    CanvasRenderer.drawTimeAxis(cs.ctx, cs.w, cs.h);
     
     cs.ctx.beginPath(); cs.ctx.strokeStyle = 'rgba(40, 124, 159, 0.2)'; cs.ctx.lineWidth = 2; cs.ctx.setLineDash([5, 5]);
     for (let i = 0; i < p.time.length; i++) {
@@ -1041,6 +1008,7 @@ function renderMath() {
       correlationPreview,
       summaryCorrelationFormula,
       summaryBandwidthFormula,
+      panel
     ];
 
     window.MathJax.typesetClear(elements);
