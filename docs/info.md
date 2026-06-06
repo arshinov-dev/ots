@@ -24,19 +24,6 @@
       defer
       src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"
     ></script>
-    <!-- Этапы обработки сигнала (каждый файл работает отдельно) -->
-    <script defer src="01_source.js"></script>
-    <script defer src="02_tx_filter.js"></script>
-    <script defer src="03_sampler.js"></script>
-    <script defer src="04_quantizer.js"></script>
-    <script defer src="05_encoder.js"></script>
-    <script defer src="06-07_modulator_channel.js"></script>
-    <script defer src="08_detector.js"></script>
-    <script defer src="09_decoder.js"></script>
-    <script defer src="10_recipient.js"></script>
-    <!-- Данные сигнала (единый источник) -->
-    <script defer src="data.js"></script>
-    <!-- Основной файл приложения -->
     <script defer src="app.js"></script>
   </head>
   <body>
@@ -195,7 +182,7 @@
                     rows="3"
                     required
                     style="margin-top: 14px;"
-                  >B_c(\tau) = P_g \cdot e^{-\beta |\tau|}, \quad -\infty < \tau < \infty</textarea>
+                  >B_c(\tau) = P_g \cdot e^{-\beta |\tau|}, \quad -\infty &lt; \tau &lt; \infty</textarea>
                 </details>
               </div>
             </fieldset>
