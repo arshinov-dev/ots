@@ -6,13 +6,12 @@
     process: function(params, SignalData) {
       const N = SignalData.N;
       const numBits = SignalData.b_t.length;
-      const alpha = parseFloat(params.samplingIncrease) || 2;
-      const dfg = parseFloat(params.signalBandwidth) || 28;
-      const stepSize = Math.max(15, Math.floor(100 / alpha));
-      const pointsPerBit = stepSize / 4;
-      const f0 = parseFloat(params.primaryFrequency) || 60;
-      const f_upper = parseFloat(params.secondaryFrequency) || 62.5;
-      const f_lower = parseFloat(params.primaryFrequency) || 61;
+      const pointsPerBit = N / numBits;
+
+      // Визуальные частоты синхронизированы с модулятором
+      const f_vis = 12;
+      const f_low_vis = 8;
+      const f_up_vis = 16;
 
       let currentPhase = 0;
       const dofm_phases = [];
@@ -41,9 +40,9 @@
         let E1 = 0, E2 = 0, E = 0;
         for (let k = startIdx; k < endIdx; k++) {
           let t_frac = k / N;
-          if (params.modulation === "DAM") { E += SignalData.z_t[k] * Math.sin(2 * Math.PI * f0 * t_frac); }
-          else if (params.modulation === "DCHM") { E1 += SignalData.z_t[k] * Math.sin(2 * Math.PI * f_upper * t_frac); E2 += SignalData.z_t[k] * Math.sin(2 * Math.PI * f_lower * t_frac); }
-          else { let refPhase = dofm_phases[i] || 0; E += SignalData.z_t[k] * Math.sin(2 * Math.PI * f0 * t_frac + refPhase); }
+          if (params.modulation === "DAM") { E += SignalData.z_t[k] * Math.sin(2 * Math.PI * f_vis * t_frac); }
+          else if (params.modulation === "DCHM") { E1 += SignalData.z_t[k] * Math.sin(2 * Math.PI * f_low_vis * t_frac); E2 += SignalData.z_t[k] * Math.sin(2 * Math.PI * f_up_vis * t_frac); }
+          else { let refPhase = dofm_phases[i] || 0; E += SignalData.z_t[k] * Math.sin(2 * Math.PI * f_vis * t_frac + refPhase); }
         }
         let decodedBit = 1;
         if (params.modulation === "DAM") { let midIdx = Math.floor((startIdx + endIdx) / 2); decodedBit = SignalData.z_t[midIdx] > u0 ? 1 : -1; }
@@ -57,9 +56,7 @@
     renderSVG: function(id, params, helpers, SignalData) {
       const { W, H, getX, getY } = helpers;
       const numBits = SignalData.b_t ? SignalData.b_t.length : 0;
-      const alpha = parseFloat(params.samplingIncrease) || 2;
-      const stepSize = Math.max(15, Math.floor(100 / alpha));
-      const bitStepX = (stepSize / (SignalData.N - 1)) * W / 4;
+      const bitStepX = W / numBits;
 
       let topH = 140, topY0 = topH / 2;
       let topSVG = `<svg viewBox="0 0 ${W} ${topH}" preserveAspectRatio="none" width="100%" height="auto" class="stage-panel__visuals-svg">`;
