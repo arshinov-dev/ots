@@ -19,14 +19,18 @@
 
       let diffSum = 0;
       for (let i = 0; i < N; i++) { diffSum += Math.pow(SignalData.g_t[i] - SignalData.g_hat_t[i], 2); }
-      SignalData.delta_sum_sq = diffSum / (N * Pg);
+      SignalData.visual_delta_sq = diffSum / (N * Pg);
+      const filterAbs = SignalData.filter_error_analytic_abs || SignalData.filter_error_abs || 0;
+      const quantAbs = SignalData.quantization_error_analytic_sq || SignalData.quantization_error_sq || 0;
+      const transmissionAbs = SignalData.transmission_noise_analytic_sq || SignalData.transmission_noise_sq || 0;
+      SignalData.delta_sum_sq = (filterAbs + quantAbs + transmissionAbs) / Pg;
+      SignalData.delta_sum_components = { filterAbs, quantAbs, transmissionAbs };
       SignalData.yMax = 4 * sigmaG;
       SignalData.yMin = -4 * sigmaG;
     },
     renderSVG: function(id, params, helpers, SignalData) {
       const { W, H, getX, getY, yZero, drawCurveSVG } = helpers;
-      const alpha = parseFloat(params.samplingIncrease) || 2;
-      const stepSize = Math.max(15, Math.floor(100 / alpha));
+      const stepSize = window.VisualMath.getSampleStep(params);
       let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
       svg += `<line x1="0" y1="${yZero}" x2="${W}" y2="${yZero}" stroke="#d5ddd8" stroke-width="2" />`;
       let stepD = `M 0 ${getY(SignalData.x_hat_t[0])}`;
@@ -36,7 +40,7 @@
         if (i === 0) stepD = `M ${x1} ${y}`; else stepD += ` L ${x1} ${y}`;
         stepD += ` L ${x2} ${y}`;
       }
-      svg += `<path d="${stepD}" stroke="rgba(12, 107, 79, 0.4)" stroke-dasharray="4,4" stroke-width="2" fill="none" stroke-linejoin="round" />`;
+      svg += `<path d="${stepD}" stroke="rgba(12, 107, 79, 0.38)" stroke-dasharray="4,4" stroke-width="2" fill="none" stroke-linejoin="round" />`;
 
       let areaD = `M ${getX(0)} ${getY(SignalData.g_t[0])}`;
       for (let i = 1; i < SignalData.N; i++) areaD += ` L ${getX(i)} ${getY(SignalData.g_t[i])}`;
@@ -45,16 +49,23 @@
       svg += `<path d="${areaD}" fill="rgba(231, 76, 60, 0.25)" stroke="none" />`;
       svg += drawCurveSVG(SignalData.g_t, '#287c9f', 2);
       svg += drawCurveSVG(SignalData.g_hat_t, '#7554aa', 3);
+      svg += `<text x="${W - 18}" y="26" fill="#e74c3c" font-family="monospace" font-size="14" text-anchor="end">визуальная площадь ошибки</text>`;
       svg += `</svg>`;
-      return svg;
+      return `<div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Финальное сравнение g(t), x̂(t) и ĝ(t)</p>${svg}</div>`;
     },
-    renderTheory: function(stage, params, toLatexNumber) {
+    renderTheory: function(stage, params, toLatexNumber, SignalData) {
       let theory = "Приёмный ФНЧ сглаживает ступеньки x̂(t), восстанавливая непрерывный сигнал ĝ(t) — итоговую оценку сообщения.";
       const delta_sum_sq = SignalData.delta_sum_sq || 0;
       const acceptableError = parseFloat(params.acceptableError) || 0.12;
-      let formulas = `<div class="formula-preview"><span>Суммарная ошибка восстановления</span>\\[ \\delta_\\Sigma^2 = \\varepsilon_ф^2 + \\xi_{кв}^2 + \\xi_{п}^2 \\approx ${toLatexNumber(delta_sum_sq.toFixed(4))} \\]</div>`;
+      const Pg = parseFloat(params.signalPower) || 1.5;
+      const components = SignalData.delta_sum_components || {};
+      const filterAbs = components.filterAbs ?? SignalData.filter_error_analytic_abs ?? 0;
+      const quantAbs = components.quantAbs ?? SignalData.quantization_error_analytic_sq ?? 0;
+      const transmissionAbs = components.transmissionAbs ?? SignalData.transmission_noise_analytic_sq ?? 0;
+      let formulas = `<div class="formula-preview"><span>Тотальная расчётная ошибка</span>\\[ \\delta_\\Sigma^2 = \\frac{\\varepsilon_ф^2 + \\varepsilon_{кв}^2 + \\xi_{п}^2}{P_g} = \\frac{${toLatexNumber(filterAbs.toFixed(4))} + ${toLatexNumber(quantAbs.toFixed(4))} + ${toLatexNumber(transmissionAbs.toFixed(4))}}{${toLatexNumber(Pg)}} = ${toLatexNumber(delta_sum_sq.toFixed(4))} \\]</div>`;
       let isSuccess = delta_sum_sq <= acceptableError;
-      formulas += `<div class="stage-panel__info-box ${isSuccess ? 'stage-panel__info-box--success' : 'stage-panel__info-box--error'}"><strong>Проверка качества:</strong><br>Допустимая ошибка: \\( \\delta_{доп}^2 = ${toLatexNumber(acceptableError)} \\)<br>${isSuccess ? '<span style="color: #0c6b4f; font-weight: bold;">✓ Система спроектирована верно.</span>' : '<span style="color: #e74c3c; font-weight: bold;">✗ Требуется корректировка.</span>'}</div>`;
+      formulas += `<div class="stage-panel__info-box ${isSuccess ? 'stage-panel__info-box--success' : 'stage-panel__info-box--error'}"><strong>Сравнение с допуском:</strong><br>\\( \\delta_\\Sigma^2 = ${toLatexNumber(delta_sum_sq.toFixed(4))} \\), \\( \\delta_{доп}^2 = ${toLatexNumber(acceptableError)} \\)<br>${isSuccess ? '<span style="color: #0c6b4f; font-weight: bold;">НОРМА</span>' : '<span style="color: #e74c3c; font-weight: bold;">ТРЕБУЕТСЯ КОРРЕКТИРОВКА</span>'}</div>`;
+      formulas += `<div class="stage-panel__info-box"><strong>Связь с графиком:</strong><br>ФНЧ сглаживает зелёную лесенку, пытаясь вернуть исходную форму. Красная площадь между синей и фиолетовой кривыми — абсолютная визуальная мера итогового расхождения; численная расчётная ошибка выше собрана из \\(\\varepsilon_ф^2\\), \\(\\varepsilon_{кв}^2\\) и \\(\\xi_п^2\\).</div>`;
       return { theory, formulas };
     }
   };

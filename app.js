@@ -121,6 +121,31 @@
     acceptableError: ["δ<sub>доп</sub><sup>2</sup>", ""],
   };
 
+  const stageControlMeta = {
+    signalPower: { label: "P_g", min: 0.1, max: 6, step: 0.1, unit: "В²" },
+    beta: { label: "β", min: 1, max: 40, step: 0.1, unit: "мс⁻¹" },
+    bandwidthFactor: { label: "k", min: 0.5, max: 5, step: 0.1, unit: "" },
+    samplingIncrease: { label: "α", min: 1, max: 5, step: 0.1, unit: "" },
+    primaryFrequency: { label: "f0/f2", min: 40, max: 120, step: 0.1, unit: "МГц" },
+    secondaryFrequency: { label: "f1", min: 40, max: 130, step: 0.1, unit: "МГц" },
+    noiseDensity: { label: "N0", min: 0.00001, max: 0.001, step: 0.00001, unit: "" },
+    signalNoiseRatio: { label: "h²", min: 1, max: 25, step: 0.1, unit: "" },
+    acceptableError: { label: "δ²доп", min: 0.01, max: 1, step: 0.01, unit: "" },
+  };
+
+  const stageControlMap = {
+    source: ["signalPower", "beta", "bandwidthFactor"],
+    "tx-filter": ["beta", "bandwidthFactor"],
+    sampler: ["samplingIncrease", "beta"],
+    quantizer: ["signalPower", "samplingIncrease"],
+    encoder: ["samplingIncrease"],
+    modulator: ["primaryFrequency", "secondaryFrequency", "signalNoiseRatio", "noiseDensity"],
+    channel: ["noiseDensity", "signalNoiseRatio"],
+    detector: ["signalNoiseRatio"],
+    decoder: ["signalNoiseRatio"],
+    recipient: ["acceptableError", "signalPower"],
+  };
+
   // Вспомогательные функции
   function getStage(stageId) { return stages.find((s) => s.id === stageId) ?? stages[0]; }
   function getParameters() { return Object.fromEntries(new FormData(parametersForm)); }
@@ -136,6 +161,32 @@
     description.textContent = `${value}${unit ? ` ${unit}` : ""}`;
     wrapper.append(term, description);
     return wrapper;
+  }
+
+  function getStageControlNames(stageId, values) {
+    const names = stageControlMap[stageId] || [];
+    return names.filter((name) => name !== "secondaryFrequency" || values.modulation === "DCHM");
+  }
+
+  function renderStageControls(stageId, values) {
+    const names = getStageControlNames(stageId, values);
+    if (!names.length) return "";
+
+    const controls = names.map((name) => {
+      const meta = stageControlMeta[name];
+      const value = Number(values[name] || 0);
+      const displayValue = Number.isFinite(value) ? value : 0;
+      return `<label class="stage-control">
+        <span>${meta.label}${meta.unit ? ` <em>${meta.unit}</em>` : ""}</span>
+        <input type="range" min="${meta.min}" max="${meta.max}" step="${meta.step}" value="${displayValue}" data-stage-param="${name}">
+        <input type="number" min="${meta.min}" max="${meta.max}" step="${meta.step}" value="${displayValue}" data-stage-param="${name}">
+      </label>`;
+    }).join("");
+
+    return `<div class="stage-panel__content stage-panel__controls">
+      <p class="eyebrow">Живые параметры этапа</p>
+      <div class="stage-controls-grid">${controls}</div>
+    </div>`;
   }
 
   // Вспомогательные функции для SVG
@@ -176,8 +227,15 @@
     return { W, H, N, yMin, yMax, getY, getX, yZero, getLocalY, drawCurveSVG, drawStemsSVG, drawDimX, drawDimY };
   }
 
+  function getParamsSignature(params) {
+    return JSON.stringify(Object.keys(params).sort().map((key) => [key, params[key]]));
+  }
+
   // Обработка данных для всех этапов последовательно
   function processAllStages(params) {
+    const paramsSignature = getParamsSignature(params);
+    if (SignalData.lastParamsString === paramsSignature && SignalData.g_hat_t) return;
+
     const stageIds = ["source", "tx-filter", "sampler", "quantizer", "encoder", "modulator", "channel", "detector", "decoder", "recipient"];
     for (const id of stageIds) {
       const handler = window.StageHandlers[id];
@@ -185,21 +243,22 @@
         handler.process(params, SignalData);
       }
     }
+    SignalData.lastParamsString = paramsSignature;
   }
 
   // Рендер панели этапа
   function renderPanel(stage) {
     const params = getParameters();
-    const helpers = createSVGHelpers();
 
     // Обрабатываем данные для всех этапов
     processAllStages(params);
+    const helpers = createSVGHelpers();
 
     // Получаем теорию и формулы из обработчика этапа
     let theory = "", formulas = "";
     const handler = window.StageHandlers[stage.id];
     if (handler && handler.renderTheory) {
-      const result = handler.renderTheory(stage, params, toLatexNumber);
+      const result = handler.renderTheory(stage, params, toLatexNumber, SignalData);
       theory = result.theory || "";
       formulas = result.formulas || "";
     }
@@ -216,6 +275,7 @@
     html += `<p class="eyebrow">Этап обработки</p><h2>${stage.title}</h2><span class="stage-panel__signal">${stage.signal}</span>`;
     if (theory) html += `<p class="stage-panel__theory">${theory}</p>`;
     html += `</div>`;
+    html += renderStageControls(stage.id, params);
     if (formulas) {
       html += `<div class="stage-panel__content stage-panel__content--formulas">${formulas}</div>`;
     } else {
@@ -253,14 +313,32 @@
     card.className = "stage-card"; card.type = "button";
     card.dataset.stageId = stage.id; card.dataset.group = stage.group;
     card.setAttribute("aria-pressed", "false");
-    card.innerHTML = `<span class="stage-card__index">${String(index + 1).padStart(2, "0")}</span><strong class="stage-card__title">${stage.title}</strong><span class="stage-card__signal">${stage.signal}</span><span class="stage-card__status">Ожидает исследования</span>`;
+    card.innerHTML = `<span class="stage-card__index">${String(index + 1).padStart(2, "0")}</span><strong class="stage-card__title">${stage.title}</strong><span class="stage-card__signal">${stage.signal}</span>`;
     card.addEventListener("click", () => selectStage(stage.id));
     return card;
   }
 
   function renderRoute() {
+    const groupTitles = {
+      source: "Источник",
+      tx: "Передача и АЦП",
+      channel: "Канал связи",
+      rx: "Приём и ЦАП",
+    };
     const fragment = document.createDocumentFragment();
-    stages.forEach((stage, index) => { fragment.append(createStageCard(stage, index)); });
+    Object.entries(groupTitles).forEach(([group, title]) => {
+      const groupStages = stages.filter((stage) => stage.group === group);
+      if (!groupStages.length) return;
+      const wrapper = document.createElement("section");
+      wrapper.className = "signal-route__group";
+      wrapper.dataset.group = group;
+      wrapper.innerHTML = `<h3><span></span>${title}</h3>`;
+      groupStages.forEach((stage) => {
+        const index = stages.indexOf(stage);
+        wrapper.append(createStageCard(stage, index));
+      });
+      fragment.append(wrapper);
+    });
     route.replaceChildren(fragment);
   }
 
@@ -348,6 +426,22 @@
     renderPanel(currentStage);
   }
 
+  function applyParameterValue(name, value) {
+    if (!parametersForm.elements[name]) return;
+    parametersForm.elements[name].value = value;
+    if (!isApplyingVariant) variantPreset.value = "custom";
+    if (name === "modulation") updateConditionalFields();
+    if (["beta", "bandwidthFactor"].includes(name)) updateDerivedFields();
+    renderParametersSummary();
+    renderPanel(getStage(currentStageId));
+  }
+
+  function handleStageControlChange(event) {
+    const name = event.target.dataset.stageParam;
+    if (!name) return;
+    applyParameterValue(name, event.target.value);
+  }
+
   function selectStage(stageId) {
     currentStageId = stageId; // Сохраняем текущий выбранный этап
     const stage = getStage(stageId);
@@ -365,6 +459,8 @@
     year.textContent = new Date().getFullYear();
     parametersForm.addEventListener("input", handleParametersChange);
     parametersForm.addEventListener("change", handleParametersChange);
+    panel.addEventListener("input", handleStageControlChange);
+    panel.addEventListener("change", handleStageControlChange);
     window.addEventListener("load", renderMath);
   }
 

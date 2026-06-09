@@ -82,14 +82,10 @@
           </div>
 
           <aside class="hero-card" aria-label="Текущее состояние проекта">
-            <p class="eyebrow">Этап разработки</p>
             <strong>Исходные данные подключены</strong>
             <p>
-              Параметры из задания уже можно вводить вручную. Следующие
-              расчётные блоки будут добавляться по очереди после сверки с
-              методическими указаниями.
             </p>
-            <span class="status-pill">Блок 01 готов</span>
+            <span class="status-pill">Блоки готовы</span>
           </aside>
         </div>
       </section>
@@ -97,7 +93,7 @@
       <section class="section page-shell" id="parameters">
         <div class="section-heading">
           <div>
-            <p class="eyebrow">Блок 01 · исходные данные</p>
+            <p class="eyebrow">Блок · исходных данных</p>
             <h2>Параметры варианта</h2>
           </div>
           <p>
@@ -342,59 +338,42 @@
         </div>
       </section>
 
-      <section class="section page-shell" id="scheme">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">Структурная схема</p>
-            <h2>Маршрут сигнала</h2>
-          </div>
-          <p>
-            Нажмите на этап, чтобы открыть его рабочую карточку. Пока все
-            расчётные этапы находятся в режиме подготовки.
-          </p>
-        </div>
-
-        <div class="scheme-legend" aria-label="Обозначения групп схемы">
-          <span><i class="legend-dot legend-dot--source"></i>Источник</span>
-          <span><i class="legend-dot legend-dot--tx"></i>Передача и АЦП</span>
-          <span><i class="legend-dot legend-dot--channel"></i>Канал связи</span>
-          <span><i class="legend-dot legend-dot--rx"></i>Приём и ЦАП</span>
-        </div>
-
-        <div class="signal-route" data-signal-route aria-label="Этапы прохождения сигнала"></div>
-      </section>
-
       <section class="section section--workspace" id="workspace">
         <div class="page-shell">
-          <div class="section-heading">
-            <div>
-              <p class="eyebrow">Рабочая область</p>
-              <h2>Карточка выбранного этапа</h2>
+          <div class="workspace-layout">
+            <div class="workspace-main">
+              <div class="section-heading section-heading--compact">
+                <div>
+                  <p class="eyebrow">Рабочая область</p>
+                  <h2>Карточка выбранного этапа</h2>
+                </div>
+                <p>
+                  Здесь отображаются теория, формулы, расчёты и графики выбранного
+                  этапа с живой связью между параметрами и визуализацией.
+                </p>
+              </div>
+
+              <article class="stage-panel" data-stage-panel aria-live="polite"></article>
             </div>
-            <p>
-              Здесь появятся теория, формулы, расчёты и графики после
-              исследования соответствующего раздела методических указаний.
-            </p>
-          </div>
 
-          <article class="stage-panel" data-stage-panel aria-live="polite"></article>
+            <aside class="route-sidebar" id="scheme" aria-label="Маршрут сигнала">
+              <div class="route-sidebar__header">
+                <p class="eyebrow">Структурная схема</p>
+                <h2>Маршрут сигнала</h2>
+                <p>Выберите блок, чтобы открыть его рабочую карточку.</p>
+              </div>
+
+              <div class="scheme-legend scheme-legend--stacked" aria-label="Обозначения групп схемы">
+                <span><i class="legend-dot legend-dot--source"></i>Источник</span>
+                <span><i class="legend-dot legend-dot--tx"></i>Передача и АЦП</span>
+                <span><i class="legend-dot legend-dot--channel"></i>Канал связи</span>
+                <span><i class="legend-dot legend-dot--rx"></i>Приём и ЦАП</span>
+              </div>
+
+              <div class="signal-route" data-signal-route aria-label="Этапы прохождения сигнала"></div>
+            </aside>
+          </div>
         </div>
-      </section>
-
-      <section class="section page-shell">
-        <article class="workflow-note">
-          <div class="workflow-note__number">01</div>
-          <div>
-            <p class="eyebrow">Правило реализации</p>
-            <h2>Сначала методичка, затем код</h2>
-            <p>
-              Перед каждым новым блоком фиксируем физический смысл,
-              используемые формулы, входной и выходной сигналы. После этого
-              добавляем минимум один график преобразования и проверяем
-              страницу в браузере.
-            </p>
-          </div>
-        </article>
       </section>
     </main>
 
