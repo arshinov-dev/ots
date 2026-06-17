@@ -3,6 +3,21 @@
   'use strict';
   window.StageHandlers = window.StageHandlers || {};
 
+  function getQuantizerParams(params) {
+    const sigmaG = Math.sqrt(parseFloat(params.signalPower) || 1.5);
+    const thresholdCount = 15;
+    const Dg = 6 * sigmaG;
+    const dU = Dg / (thresholdCount - 1);
+    const levels = [];
+    for (let j = 0; j < 16; j++) levels.push(-3 * sigmaG + (j - 0.5) * dU);
+    return { sigmaG, Dg, dU, levels };
+  }
+
+  function indexFromCode(word) {
+    const value = parseInt(word, 2);
+    return value === 0 ? 15 : Math.max(0, Math.min(15, value - 1));
+  }
+
   function getTransitionDistanceFactor(probabilities) {
     const L = 16;
     let sum = 0;
@@ -19,24 +34,29 @@
   window.StageHandlers.decoder = {
     process: function(params, SignalData) {
       const N = SignalData.N;
-      const sigmaG = Math.sqrt(parseFloat(params.signalPower) || 1.5);
-      const L = 16;
-      const Dg = 6 * sigmaG;
-      const dU = Dg / (L - 1);
+      const { dU, levels } = getQuantizerParams(params);
       const stepSize = window.VisualMath.getSampleStep(params);
 
       SignalData.v_hat = [];
       SignalData.chunkErrors = [];
+      SignalData.received_code_words = [];
+      SignalData.original_code_words = [];
+      SignalData.error_code_words = [];
+      SignalData.decoded_indices = [];
       for (let i = 0; i < SignalData.b_hat.length; i += 4) {
         let chunk = SignalData.b_hat.slice(i, i + 4);
         let binStr = chunk.map(b => b > 0 ? "1" : "0").join("").padEnd(4, "0");
-        let dec = parseInt(binStr, 2);
-        if (dec >= L) dec = L - 1;
-        let recoveredLevel = -3 * sigmaG + dec * dU;
+        let dec = indexFromCode(binStr);
+        let recoveredLevel = levels[dec];
+        SignalData.received_code_words.push(binStr);
+        SignalData.decoded_indices.push(dec);
         SignalData.v_hat.push(recoveredLevel);
         let origChunk = SignalData.b_t.slice(i, i + 4).map(b => b > 0 ? "1" : "0").join("").padEnd(4, "0");
+        SignalData.original_code_words.push(origChunk);
+        const errorWord = [...binStr].map((bit, bitIndex) => bit === (origChunk[bitIndex] || "0") ? "0" : "1").join("");
+        SignalData.error_code_words.push(errorWord);
         if (binStr !== origChunk) {
-          SignalData.chunkErrors.push({ orig: origChunk, err: binStr, expected: -3 * sigmaG + parseInt(origChunk, 2) * dU, decoded: recoveredLevel });
+          SignalData.chunkErrors.push({ orig: origChunk, err: binStr, errorWord, expected: levels[indexFromCode(origChunk)], decoded: recoveredLevel });
         }
       }
       const transmissionErr = SignalData.v_hat.reduce((acc, value, index) => {
@@ -57,8 +77,34 @@
     renderSVG: function(id, params, helpers, SignalData) {
       const { W, H, getX, getLocalY, yZero, drawStemsSVG } = helpers;
       const stepSize = window.VisualMath.getSampleStep(params);
+      const zoom = window.VisualMath.getZoomWindow(SignalData, 5);
+      const wordStart = Math.floor(zoom.start / 4);
+      const wordEnd = Math.min(SignalData.received_code_words.length, Math.ceil(zoom.end / 4) + 2);
+      const codeRows = SignalData.received_code_words.slice(wordStart, wordEnd).map((word, offset) => {
+        const index = wordStart + offset;
+        const original = SignalData.original_code_words[index] || "0000";
+        const error = SignalData.error_code_words[index] || "0000";
+        const decodedLevel = SignalData.v_hat[index] ?? 0;
+        const expectedLevel = SignalData.quantized_v[index] ?? decodedLevel;
+        const changed = word !== original;
+        return `<tr class="${changed ? "is-error-row" : ""}"><td>${index + 1}</td><td>${original}</td><td>${error}</td><td>${word}</td><td>${decodedLevel.toFixed(3)}</td><td>${(decodedLevel - expectedLevel).toFixed(3)}</td></tr>`;
+      }).join("");
+      const codeTable = `<div class="quant-table-wrap"><table class="quant-table code-table"><thead><tr><th>k</th><th>b_k</th><th>E_k</th><th>b̂_k</th><th>v̂, В</th><th>ξп, В</th></tr></thead><tbody>${codeRows}</tbody></table></div>`;
+
+      const errH = 130;
+      const bits = SignalData.error_code_words.slice(wordStart, wordEnd).join("");
+      const bitW = W / Math.max(1, bits.length);
+      let errSvg = `<svg viewBox="0 0 ${W} ${errH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
+      errSvg += window.VisualMath.axes(W, errH, errH - 28, "i", "E_i");
+      [...bits].forEach((bit, index) => {
+        const x = index * bitW;
+        const h = bit === "1" ? errH - 54 : 10;
+        errSvg += `<rect x="${x + 2}" y="${errH - 28 - h}" width="${Math.max(3, bitW - 4)}" height="${h}" fill="${bit === "1" ? "#e74c3c" : "#d5ddd8"}" fill-opacity="${bit === "1" ? 0.78 : 0.65}" />`;
+      });
+      errSvg += `</svg>`;
+
       let decH = 200, decY0 = getLocalY(0, decH);
-      let decSVG = `<svg viewBox="0 0 ${W} ${decH}" preserveAspectRatio="none" width="100%" height="auto" class="stage-panel__visuals-svg">`;
+      let decSVG = `<svg viewBox="0 0 ${W} ${decH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
       decSVG += `<line x1="0" y1="${decY0}" x2="${W}" y2="${decY0}" stroke="#d5ddd8" stroke-width="2" />`;
 
       let errorRects = "";
@@ -85,19 +131,23 @@
       decSVG += errorRects;
       decSVG += `<path d="${originalStepD}" stroke="#287c9f" stroke-width="2.2" fill="none" stroke-opacity="0.24" stroke-linejoin="round" />`;
       decSVG += `<path d="${recoveredStepD}" stroke="#0c6b4f" stroke-width="3" fill="none" stroke-linejoin="round" />`;
-      decSVG += `<text x="${W - 18}" y="24" fill="#e74c3c" font-family="monospace" font-size="14" text-anchor="end">ξп² ≈ ${(SignalData.transmission_noise_analytic_sq || 0).toFixed(4)}</text>`;
       decSVG += `</svg>`;
-      return `<div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header"><strong style="color:#0c6b4f">Восстановленные уровни x̂(t)</strong></p>${decSVG}</div>`;
+      const scaleNote = `<dl class="visual-scale"><div><dt>Шум передачи</dt><dd>ξп²≈${(SignalData.transmission_noise_analytic_sq || 0).toFixed(4)} В²</dd></div><div><dt>Масштаб</dt><dd>та же амплитудная шкала, что у исходного сообщения</dd></div></dl>`;
+      const codeScale = `<dl class="visual-scale"><div><dt>Операция</dt><dd>b̂_i=b_i⊕E_i</dd></div><div><dt>Ошибочных слов</dt><dd>${SignalData.chunkErrors.length}</dd></div></dl>`;
+      return `<div class="stage-panel__visuals-stack">
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Вектор битовых ошибок E_i</p>${codeScale}${errSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Декодирование принятых кодовых слов</p>${codeTable}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header"><strong style="color:#0c6b4f">Восстановленные уровни x̂(t)</strong></p>${scaleNote}${decSVG}</div>
+      </div>`;
     },
     renderTheory: function(stage, params, toLatexNumber, SignalData) {
-      const sigmaG = Math.sqrt(parseFloat(params.signalPower) || 1.5);
-      const Dg = 6 * sigmaG;
-      const dU = Dg / 15;
+      const { dU } = getQuantizerParams(params);
       const pErr = SignalData.p_err_val || 0;
       const transitionFactor = SignalData.transition_distance_factor || getTransitionDistanceFactor(SignalData.level_probabilities);
       const xiAnalytic = SignalData.transmission_noise_analytic_sq || (0.1777 * dU * dU * pErr * transitionFactor);
       let theory = "Пачки из μ битов снова группируются и переводятся в десятичный номер уровня. Если хотя бы один бит был искажён, декодер восстановит неправильный уровень.";
-      let formulas = `<div class="formula-preview"><span>Формула обратного пересчета</span>\\[ \\hat{v}_j = -3\\sigma_g + j \\cdot \\Delta U \\]</div>`;
+      let formulas = `<div class="formula-preview"><span>Битовый канал и обратное кодирование</span>\\[ \\hat{b}_i=b_i\\oplus_2E_i,\\quad 0001\\to v_1,\\ldots,1111\\to v_{15},\\quad 0000\\to v_{16} \\]</div>`;
+      formulas += `<div class="formula-preview"><span>Формула обратного пересчета уровня</span>\\[ \\hat{v}_j = -3\\sigma_g + (j-1{,}5)\\Delta U \\]</div>`;
       const chunkErrors = SignalData.chunkErrors || [];
       if (chunkErrors.length > 0) {
         let ce = chunkErrors[0];
@@ -105,7 +155,7 @@
       } else {
         formulas += `<div class="stage-panel__info-box stage-panel__info-box--ok">Ошибок в битах не обнаружено.</div>`;
       }
-      formulas += `<div class="formula-preview"><span>Аналитический шум передачи</span>\\[ \\xi_p^2 \\approx 0{,}1777\\Delta U^2p_{ош}\\sum p_{ij}(j-i)^2 = 0{,}1777\\cdot ${toLatexNumber(dU.toFixed(3))}^2\\cdot ${toLatexNumber(pErr.toExponential(3).replace(".", "{,}"))}\\cdot ${toLatexNumber(transitionFactor.toFixed(3))} \\approx ${toLatexNumber(xiAnalytic.toFixed(6))} \\text{ В}^2 \\]</div>`;
+      formulas += `<div class="formula-preview"><span>Аналитический шум передачи</span>\\[ \\xi_p^2 \\approx 0{,}1777\\Delta U^2p_{ош}\\sum p_{ij}(j-i)^2 = 0{,}1777\\cdot ${toLatexNumber(dU.toFixed(3))}^2\\cdot ${pErr.toExponential(3).replace(".", "{,}")}\\cdot ${toLatexNumber(transitionFactor.toFixed(3))} \\approx ${toLatexNumber(xiAnalytic.toFixed(6))} \\text{ В}^2 \\]</div>`;
       formulas += `<div class="stage-panel__info-box"><strong>Связь с графиком:</strong><br>Бледная ступенька показывает исходные уровни из квантователя, зелёный контур — восстановленные уровни. Красная заливка показывает конкретные отклонения на этом прогоне, а численная \\(\\xi_p^2\\) выше считается по вероятности ошибки и матрице переходов 4-битного кода.</div>`;
       return { theory, formulas };
     }

@@ -18,6 +18,104 @@
     { id: "recipient", title: "Приёмный ФНЧ и получатель", group: "rx", signal: "x̂(t) → ĉ(t)" },
   ];
 
+  const stageGuides = {
+    source: {
+      input: "исходное сообщение c(t)",
+      action: "превращаем сообщение в электрический случайный процесс g(t)",
+      output: "первичный сигнал g(t)",
+      points: [
+        "Сначала смотри временную реализацию: это один возможный вид сообщения.",
+        "Затем связывай её с Bc(τ): корреляция показывает, как быстро сигнал забывает прошлые значения.",
+        "После этого переходи к Gg(f): спектр объясняет, какую полосу должен пропустить тракт.",
+      ],
+    },
+    "tx-filter": {
+      input: "первичный сигнал g(t)",
+      action: "идеальный ФНЧ оставляет полезную полосу и срезает спектральный хвост",
+      output: "ограниченный по спектру сигнал x(t)",
+      points: [
+        "Во времени фильтр выглядит как сглаживание резких изменений.",
+        "В частотной области видно главное: всё за пределами Δfg превращается в ошибку фильтрации.",
+      ],
+    },
+    sampler: {
+      input: "непрерывный сигнал x(t)",
+      action: "берём отсчёты через Δt по теореме Котельникова",
+      output: "последовательность x(k·Δt)",
+      points: [
+        "Чем больше α, тем плотнее стоят отсчёты.",
+        "Этот же шаг Δt дальше задаёт длительность ступеней ЦАП, поэтому дискретизация связывает начало и конец тракта.",
+      ],
+    },
+    quantizer: {
+      input: "отсчёты x(k·Δt)",
+      action: "заменяем каждый отсчёт ближайшим разрешённым уровнем",
+      output: "уровни квантования vₖʲ",
+      points: [
+        "Первый график показывает потерю точности на каждом отсчёте.",
+        "Лесенка квантователя объясняет правило замены амплитуды уровнем.",
+        "Гистограмма показывает, какие уровни чаще появляются у гауссовского сигнала.",
+      ],
+    },
+    encoder: {
+      input: "уровни vₖʲ",
+      action: "каждый уровень заменяется 4-битной кодовой комбинацией",
+      output: "цифровой поток bₖᵘ",
+      points: [
+        "Сначала сопоставь уровень и кодовое слово.",
+        "Потом смотри меандр b(t): именно он управляет радиомодулятором.",
+        "Синхронная лупа дальше повторяется в модуляторе, канале и детекторе.",
+      ],
+    },
+    modulator: {
+      input: "цифровой поток bₖᵘ и несущая uₙ(t)",
+      action: "код управляет одним свойством несущей",
+      output: "радиосигнал S(t)",
+      points: [
+        "В ДАМ меняется амплитуда: бит 0 гасит или ослабляет посылку, бит 1 включает её.",
+        "В ДЧМ меняется частота: разные биты передаются разными несущими f1 и f2.",
+        "В ДОФМ меняется относительная фаза: смысл несёт скачок фазы между соседними посылками.",
+      ],
+    },
+    channel: {
+      input: "передаваемый сигнал S(t)",
+      action: "к сигналу добавляется аддитивный гауссовский шум",
+      output: "принятая смесь z(t)",
+      points: [
+        "Сравни три раскрываемых фрагмента сверху вниз: чистый сигнал, отдельный шум, сумма на входе приёмника.",
+        "N0 меняет мощность шума, а h² задаёт требуемую мощность сигнала для выбранной полосы.",
+      ],
+    },
+    detector: {
+      input: "смесь z(t)",
+      action: "приёмник выбирает бит по правилу, зависящему от модуляции и способа приёма",
+      output: "оценка битов b̂ₖᵘ",
+      points: [
+        "Для ДАМ важен порог амплитуды.",
+        "Для ДЧМ сравнивается энергия в двух частотных ветках.",
+        "Для ДОФМ решение связано с фазой или полярностью соседних посылок.",
+      ],
+    },
+    decoder: {
+      input: "принятые биты b̂ₖᵘ",
+      action: "кодовые слова снова переводятся в амплитудные уровни",
+      output: "восстановленные уровни x̂(t)",
+      points: [
+        "Если бит ошибся, кодовое слово может попасть в другой уровень.",
+        "Красная область показывает уже не радиошум, а шум передачи после декодирования.",
+      ],
+    },
+    recipient: {
+      input: "ступенчатый сигнал x̂(t)",
+      action: "интерполяция и приёмный ФНЧ сглаживают уровни",
+      output: "оценка исходного сообщения ĉ(t)",
+      points: [
+        "Сравни исходную кривую и восстановленную: это итог всей цепочки.",
+        "Финальная δ²Σ собирает три причины потерь: фильтрацию, квантование и ошибки передачи.",
+      ],
+    },
+  };
+
   // DOM элементы
   const route = document.querySelector("[data-signal-route]");
   const panel = document.querySelector("[data-stage-panel]");
@@ -136,7 +234,7 @@
   const stageControlMap = {
     source: ["signalPower", "beta", "bandwidthFactor"],
     "tx-filter": ["beta", "bandwidthFactor"],
-    sampler: ["samplingIncrease", "beta"],
+    sampler: ["samplingIncrease", "beta", "bandwidthFactor"],
     quantizer: ["signalPower", "samplingIncrease"],
     encoder: ["samplingIncrease"],
     modulator: ["primaryFrequency", "secondaryFrequency", "signalNoiseRatio", "noiseDensity"],
@@ -152,6 +250,44 @@
   function formatNumber(value) { return Number.isFinite(value) ? String(Number(value.toFixed(10))) : ""; }
   function toLatexNumber(value) { return String(value).replace(".", "{,}"); }
   function setFormula(element, latex) { element.textContent = `\\[${latex}\\]`; }
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, (char) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    }[char]));
+  }
+
+  function getModulationLearningNote(params) {
+    const notes = {
+      DAM: "Сейчас выбран ДАМ: форма должна менять амплитуду несущей, а приёмник работает по амплитудному правилу.",
+      DCHM: "Сейчас выбран ДЧМ: форма использует две частоты f2 и f1, а приёмник сравнивает частотные ветви.",
+      DOFM: "Сейчас выбран ДОФМ: форма использует одну несущую f0, а информация переносится относительным изменением фазы.",
+    };
+    return notes[params.modulation] || "";
+  }
+
+  function renderLearningGuide(stage, params) {
+    const guide = stageGuides[stage.id];
+    if (!guide) return "";
+    const stageIndex = stages.findIndex((item) => item.id === stage.id);
+    const nextStage = stages[stageIndex + 1];
+    const modulationNote = ["modulator", "detector"].includes(stage.id) ? getModulationLearningNote(params) : "";
+    const points = guide.points.map((point) => `<li>${escapeHtml(point)}</li>`).join("");
+    return `<div class="stage-panel__content stage-panel__guide" data-group="${stage.group}">
+      <p class="eyebrow">Логика этапа</p>
+      <div class="stage-flow">
+        <div><span>Вход</span><strong>${escapeHtml(guide.input)}</strong></div>
+        <div><span>Действие</span><strong>${escapeHtml(guide.action)}</strong></div>
+        <div><span>Выход</span><strong>${escapeHtml(guide.output)}</strong></div>
+      </div>
+      <ul class="learning-points">${points}</ul>
+      ${modulationNote ? `<p class="stage-panel__guide-note">${escapeHtml(modulationNote)}</p>` : ""}
+      ${nextStage ? `<p class="stage-panel__next">Дальше: ${escapeHtml(nextStage.title)} · ${escapeHtml(nextStage.signal)}</p>` : ""}
+    </div>`;
+  }
 
   function createSummaryItem(label, value, unit = "") {
     const wrapper = document.createElement("div");
@@ -275,6 +411,7 @@
     html += `<p class="eyebrow">Этап обработки</p><h2>${stage.title}</h2><span class="stage-panel__signal">${stage.signal}</span>`;
     if (theory) html += `<p class="stage-panel__theory">${theory}</p>`;
     html += `</div>`;
+    html += renderLearningGuide(stage, params);
     html += renderStageControls(stage.id, params);
     if (formulas) {
       html += `<div class="stage-panel__content stage-panel__content--formulas">${formulas}</div>`;
@@ -290,7 +427,33 @@
     }
 
     panel.innerHTML = html;
+    enhanceVisualLayers();
     renderMath();
+  }
+
+  function enhanceVisualLayers() {
+    const layers = panel.querySelectorAll(".stage-panel__visuals-layer");
+    layers.forEach((layer, index) => {
+      if (layer.closest(".visual-step")) return;
+      const header = layer.querySelector(".stage-panel__visuals-header");
+      const title = header?.textContent.trim() || `Фрагмент ${index + 1}`;
+      if (header) header.remove();
+
+      const details = document.createElement("details");
+      details.className = "visual-step";
+      details.open = true;
+
+      const summary = document.createElement("summary");
+      summary.className = "visual-step__summary";
+      summary.innerHTML = `<span>Шаг ${index + 1}</span><strong>${escapeHtml(title)}</strong>`;
+
+      const body = document.createElement("div");
+      body.className = "visual-step__body";
+      while (layer.firstChild) body.append(layer.firstChild);
+
+      details.append(summary, body);
+      layer.append(details);
+    });
   }
 
   function renderMath() {

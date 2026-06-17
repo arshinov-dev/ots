@@ -854,6 +854,86 @@ details.field summary::-webkit-details-marker {
   line-height: 1.6;
 }
 
+.stage-panel__guide {
+  background:
+    linear-gradient(135deg, rgba(12, 107, 79, 0.07), transparent 64%),
+    #f7faf8;
+}
+
+.stage-flow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.stage-flow div {
+  display: grid;
+  align-content: start;
+  min-height: 98px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  background: #ffffff;
+}
+
+.stage-flow span {
+  margin-bottom: 7px;
+  color: var(--group-color);
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.stage-flow strong {
+  font-size: 0.86rem;
+  line-height: 1.42;
+}
+
+.learning-points {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.learning-points li {
+  position: relative;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.learning-points li::before {
+  position: absolute;
+  left: 0;
+  color: var(--group-color);
+  content: "•";
+  font-weight: 900;
+}
+
+.stage-panel__guide-note,
+.stage-panel__next {
+  margin-top: 14px;
+  border-radius: var(--radius-sm);
+  padding: 11px 12px;
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.stage-panel__guide-note {
+  background: var(--group-soft);
+  color: var(--ink);
+}
+
+.stage-panel__next {
+  border: 1px solid var(--line);
+  background: #ffffff;
+  color: var(--muted);
+}
+
 .stage-panel__signal {
   display: inline-block;
   margin: 8px 0 20px;
@@ -914,6 +994,225 @@ details.field summary::-webkit-details-marker {
   margin-top: 10px;
 }
 
+.quant-table-wrap {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.quant-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 620px;
+  font-size: 0.84rem;
+}
+
+.quant-table th,
+.quant-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 7px 9px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.quant-table th {
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.quant-table th:nth-child(2),
+.quant-table td:nth-child(2) {
+  text-align: center;
+}
+
+.quant-table th:first-child,
+.quant-table td:first-child {
+  text-align: left;
+}
+
+.code-table td:nth-child(4) {
+  color: var(--accent-dark);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+
+.quant-table tr.is-error-row td {
+  background: rgba(231, 76, 60, 0.06);
+  color: #9b2f27;
+}
+
+.distance-table-wrap {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.distance-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.72rem;
+}
+
+.distance-table th,
+.distance-table td {
+  border: 1px solid var(--line);
+  padding: 5px 6px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.distance-table th {
+  background: #f7faf8;
+  color: var(--muted);
+  font-weight: 850;
+}
+
+.distance-table td.is-diagonal {
+  background: rgba(12, 107, 79, 0.08);
+  color: var(--accent-dark);
+  font-weight: 900;
+}
+
+.visual-step {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: #f7faf8;
+  overflow: hidden;
+}
+
+.visual-step[open] {
+  background: #ffffff;
+}
+
+.visual-step__summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 12px 14px;
+  cursor: pointer;
+}
+
+.visual-step__summary::-webkit-details-marker {
+  display: none;
+}
+
+.visual-step__summary::after {
+  justify-self: end;
+  color: var(--muted);
+  content: "+";
+  font-size: 1.15rem;
+  font-weight: 850;
+}
+
+.visual-step[open] .visual-step__summary::after {
+  content: "-";
+}
+
+.visual-step__summary span {
+  border-radius: 999px;
+  padding: 5px 8px;
+  background: var(--accent-soft);
+  color: var(--accent-dark);
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.visual-step__summary strong {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.visual-step__body {
+  padding: 0 14px 14px;
+}
+
+.visual-scale {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.visual-scale div {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  background: #f7faf8;
+}
+
+.visual-scale dt {
+  margin: 0 0 3px;
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.visual-scale dd {
+  margin: 0;
+  color: var(--ink);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.legend-line {
+  display: inline-block;
+  width: 24px;
+  height: 0;
+  margin-right: 6px;
+  vertical-align: middle;
+  border-top: 3px solid currentColor;
+}
+
+.legend-line--source {
+  color: var(--source);
+  opacity: 0.45;
+}
+
+.legend-line--filtered {
+  color: var(--accent);
+}
+
+.code-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 8px;
+}
+
+.code-strip__item {
+  display: grid;
+  gap: 5px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  background: #ffffff;
+}
+
+.code-strip__item span,
+.code-strip__item em {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-style: normal;
+}
+
+.code-strip__item strong {
+  color: var(--accent-dark);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 1.05rem;
+  letter-spacing: 0.08em;
+}
+
 .stage-panel__controls {
   background: #f7faf8;
 }
@@ -959,6 +1258,14 @@ details.field summary::-webkit-details-marker {
 }
 
 @media (max-width: 720px) {
+  .stage-flow {
+    grid-template-columns: 1fr;
+  }
+
+  .stage-flow div {
+    min-height: auto;
+  }
+
   .stage-control {
     grid-template-columns: 1fr;
   }

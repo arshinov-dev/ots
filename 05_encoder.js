@@ -3,66 +3,125 @@
   'use strict';
   window.StageHandlers = window.StageHandlers || {};
 
-  function buildLevels(params) {
+  function buildQuantizerParams(params) {
     const sigmaG = Math.sqrt(parseFloat(params.signalPower) || 1.5);
-    const L = 16;
+    const thresholdCount = 15;
+    const levelCount = 16;
     const Dg = 6 * sigmaG;
-    const dU = Dg / (L - 1);
+    const dU = Dg / (thresholdCount - 1);
+    const thresholds = [];
+    for (let i = 0; i < thresholdCount; i++) thresholds.push(-3 * sigmaG + i * dU);
     const levels = [];
-    for (let j = 0; j < L; j++) levels.push(-3 * sigmaG + j * dU);
-    return levels;
+    for (let j = 0; j < levelCount; j++) levels.push(-3 * sigmaG + (j - 0.5) * dU);
+    return { sigmaG, thresholdCount, levelCount, dU, thresholds, levels };
+  }
+
+  function codeForLevelIndex(index) {
+    const decimal = index + 1;
+    return decimal === 16 ? "0000" : decimal.toString(2).padStart(4, "0");
+  }
+
+  function indexFromCode(word) {
+    const value = parseInt(word, 2);
+    return value === 0 ? 15 : Math.max(0, Math.min(15, value - 1));
+  }
+
+  function hammingDistance(left, right) {
+    let distance = 0;
+    for (let i = 0; i < Math.max(left.length, right.length); i++) {
+      if ((left[i] || "0") !== (right[i] || "0")) distance++;
+    }
+    return distance;
+  }
+
+  function buildCodebook() {
+    const words = [];
+    for (let i = 0; i < 16; i++) words.push(codeForLevelIndex(i));
+    return words;
+  }
+
+  function buildDistanceMatrix(words) {
+    return words.map((left) => words.map((right) => hammingDistance(left, right)));
+  }
+
+  function quantizeIndex(value, thresholds) {
+    const index = thresholds.findIndex((threshold) => value <= threshold);
+    return index === -1 ? 15 : index;
   }
 
   window.StageHandlers.encoder = {
     process: function(params, SignalData) {
-      const levels = buildLevels(params);
+      const { thresholds, levels } = buildQuantizerParams(params);
+      const codebook = buildCodebook();
       SignalData.digital_b = [];
       SignalData.b_t = [];
       SignalData.code_words = [];
+      SignalData.codebook = codebook;
+      SignalData.code_distance_matrix = buildDistanceMatrix(codebook);
+      SignalData.code_level_indices = [];
+      SignalData.code_decimal_numbers = [];
       SignalData.quantized_v.forEach((val) => {
-        let closestIdx = 0, minDiff = Infinity;
-        for (let j = 0; j < levels.length; j++) {
-          const diff = Math.abs(levels[j] - val);
-          if (diff < minDiff) { minDiff = diff; closestIdx = j; }
-        }
-        const binStr = closestIdx.toString(2).padStart(4, '0');
+        const closestIdx = Number.isInteger(SignalData.quantized_indices?.[SignalData.code_words.length])
+          ? SignalData.quantized_indices[SignalData.code_words.length]
+          : quantizeIndex(val, thresholds);
+        const binStr = codebook[closestIdx];
+        SignalData.code_level_indices.push(closestIdx);
+        SignalData.code_decimal_numbers.push(closestIdx + 1);
         SignalData.code_words.push(binStr);
         for (const bit of binStr) {
           SignalData.digital_b.push(bit);
           SignalData.b_t.push(bit === '1' ? 1 : -1);
         }
       });
+      const probabilities = SignalData.level_probabilities || new Array(16).fill(1 / 16);
+      let ones = 0;
+      let zeros = 0;
+      codebook.forEach((word, index) => {
+        const p = probabilities[index] || 0;
+        ones += [...word].filter((bit) => bit === "1").length * p;
+        zeros += [...word].filter((bit) => bit === "0").length * p;
+      });
+      SignalData.bit_probabilities = {
+        one: ones / 4,
+        zero: zeros / 4,
+      };
+      SignalData.indexFromCode = indexFromCode;
     },
 
     renderSVG: function(id, params, helpers, SignalData) {
-      const { W, getX, getLocalY } = helpers;
+      const { W } = helpers;
       const numBits = SignalData.b_t ? SignalData.b_t.length : 0;
-      const stepSize = window.VisualMath.getSampleStep(params);
       const fd = 2 * (parseFloat(params.samplingIncrease) || 2) * (parseFloat(params.signalBandwidth) || 28);
       const dt = 1 / fd;
       const tauSim = dt / 4;
 
-      const topH = 210;
-      const topY0 = getLocalY(0, topH);
-      let topSvg = `<svg viewBox="0 0 ${W} ${topH}" preserveAspectRatio="none" width="100%" height="auto" class="stage-panel__visuals-svg">`;
-      topSvg += `<line x1="0" y1="${topY0}" x2="${W}" y2="${topY0}" stroke="#d5ddd8" stroke-width="2" />`;
-      let stemPaths = "";
-      for (let i = 0; i < SignalData.sampled_x_indices.length; i++) {
-        const idx = SignalData.sampled_x_indices[i];
-        const x = getX(idx);
-        const val = SignalData.quantized_v[i];
-        const y = getLocalY(val, topH);
-        stemPaths += `M ${x} ${topY0} L ${x} ${y} `;
-        const binStr = SignalData.code_words?.[i] || SignalData.digital_b.slice(i * 4, i * 4 + 4).join('');
-        topSvg += `<circle cx="${x}" cy="${y}" r="4" fill="#0c6b4f" />
-          <text x="${x}" y="${val > 0 ? y - 11 : y + 22}" fill="#0c6b4f" fill-opacity="0.95" font-family="monospace" font-size="13" font-weight="bold" text-anchor="middle">${binStr}</text>`;
-      }
-      topSvg += `<path d="${stemPaths}" stroke="#0c6b4f" stroke-width="2" fill="none" stroke-opacity="0.35" />`;
-      topSvg += `</svg>`;
+      const codeItems = SignalData.code_words.slice(0, 10).map((word, index) => {
+        const level = SignalData.quantized_v[index] ?? 0;
+        const levelIndex = SignalData.quantized_indices?.[index] ?? 0;
+        return `<div class="code-strip__item">
+          <span>k=${index + 1}</span>
+          <strong>${word}</strong>
+          <em>v${levelIndex + 1}=${level.toFixed(2)} В</em>
+        </div>`;
+      }).join("");
+      const codeStrip = `<div class="code-strip">${codeItems}</div>`;
+
+      const codeRows = (SignalData.codebook || buildCodebook()).map((word, index) => {
+        const level = SignalData.levels?.[index] ?? buildQuantizerParams(params).levels[index];
+        const p = SignalData.level_probabilities?.[index] ?? 0;
+        return `<tr><td>${index + 1}</td><td>v${index + 1}</td><td>${level.toFixed(3)}</td><td>${word}</td><td>${p.toFixed(4)}</td></tr>`;
+      }).join("");
+      const codeTable = `<div class="quant-table-wrap"><table class="quant-table code-table"><thead><tr><th>№</th><th>уровень</th><th>В</th><th>код</th><th>p_j</th></tr></thead><tbody>${codeRows}</tbody></table></div>`;
+
+      const matrixRows = (SignalData.code_distance_matrix || []).map((row, i) => {
+        return `<tr><th>${i + 1}</th>${row.map((value, j) => `<td class="${i === j ? "is-diagonal" : ""}">${value}</td>`).join("")}</tr>`;
+      }).join("");
+      const matrixHead = `<tr><th>d</th>${Array.from({ length: 16 }, (_, i) => `<th>${i + 1}</th>`).join("")}</tr>`;
+      const distanceTable = `<div class="distance-table-wrap"><table class="distance-table"><thead>${matrixHead}</thead><tbody>${matrixRows}</tbody></table></div>`;
 
       const botH = 150;
       const bitStepX = W / Math.max(1, numBits);
-      let botSvg = `<svg viewBox="0 0 ${W} ${botH}" preserveAspectRatio="none" width="100%" height="auto" class="stage-panel__visuals-svg">`;
+      let botSvg = `<svg viewBox="0 0 ${W} ${botH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
       botSvg += `<line x1="0" y1="${botH * 0.5}" x2="${W}" y2="${botH * 0.5}" stroke="#d5ddd8" stroke-width="2" />`;
       let meanderD = "";
       for (let i = 0; i < numBits; i++) {
@@ -81,20 +140,18 @@
         const sampleWidth = bitStepX * 4;
         botSvg += `<line x1="0" y1="${botH - 28}" x2="${sampleWidth}" y2="${botH - 28}" stroke="#e74c3c" stroke-width="2" />
           <path d="M 7 ${botH - 33} L 0 ${botH - 28} L 7 ${botH - 23}" fill="none" stroke="#e74c3c" stroke-width="2" />
-          <path d="M ${sampleWidth - 7} ${botH - 33} L ${sampleWidth} ${botH - 28} L ${sampleWidth - 7} ${botH - 23}" fill="none" stroke="#e74c3c" stroke-width="2" />
-          <text x="${sampleWidth / 2}" y="${botH - 36}" fill="#e74c3c" font-family="monospace" font-size="14" text-anchor="middle">Δt</text>`;
+          <path d="M ${sampleWidth - 7} ${botH - 33} L ${sampleWidth} ${botH - 28} L ${sampleWidth - 7} ${botH - 23}" fill="none" stroke="#e74c3c" stroke-width="2" />`;
         for (let i = 1; i < 4; i++) {
           const x = i * bitStepX;
           botSvg += `<line x1="${x}" y1="10" x2="${x}" y2="${botH - 16}" stroke="rgba(98,113,107,0.28)" stroke-dasharray="4,7" />`;
         }
-        botSvg += `<text x="${bitStepX / 2}" y="20" fill="#62716b" font-family="monospace" font-size="13" text-anchor="middle">τсим = ${tauSim.toFixed(4)} мс</text>`;
       }
       botSvg += `</svg>`;
 
       const zoom = window.VisualMath.getZoomWindow(SignalData, 5);
       const zoomH = 150;
       const zoomBitW = W / Math.max(1, zoom.length);
-      let zoomSvg = `<svg viewBox="0 0 ${W} ${zoomH}" preserveAspectRatio="none" width="100%" height="auto" class="stage-panel__visuals-svg">`;
+      let zoomSvg = `<svg viewBox="0 0 ${W} ${zoomH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
       zoomSvg += `<rect x="0" y="0" width="${W}" height="${zoomH}" fill="rgba(40,124,159,0.04)" />`;
       zoomSvg += `<line x1="0" y1="${zoomH * 0.5}" x2="${W}" y2="${zoomH * 0.5}" stroke="#d5ddd8" stroke-width="2" />`;
       let zoomD = "";
@@ -108,32 +165,64 @@
           if (prevY !== y) zoomD += `L ${x1} ${prevY} L ${x1} ${y} `;
         }
         zoomD += `L ${x2} ${y} `;
-        zoomSvg += `<line x1="${x1}" y1="0" x2="${x1}" y2="${zoomH}" stroke="rgba(98,113,107,0.28)" stroke-dasharray="4,7" />
-          <text x="${x1 + zoomBitW / 2}" y="${zoomH - 12}" fill="#62716b" font-family="monospace" font-size="13" text-anchor="middle">b${zoom.start + i + 1}</text>`;
+        zoomSvg += `<line x1="${x1}" y1="0" x2="${x1}" y2="${zoomH}" stroke="rgba(98,113,107,0.28)" stroke-dasharray="4,7" />`;
       }
       zoomSvg += `<line x1="${W}" y1="0" x2="${W}" y2="${zoomH}" stroke="rgba(98,113,107,0.28)" stroke-dasharray="4,7" />`;
       zoomSvg += `<path d="${zoomD}" stroke="#0c6b4f" stroke-width="3.2" fill="none" stroke-linejoin="miter" />`;
-      zoomSvg += `<text x="${W - 18}" y="24" fill="#287c9f" font-family="monospace" font-size="14" text-anchor="end">окно ${zoom.start + 1}–${zoom.end}</text>`;
       zoomSvg += `</svg>`;
 
-      const specH = 240;
-      const fMax = 8;
-      const samples = window.VisualMath.makeSamples(-fMax, fMax, 360, (f) => {
-        if (Math.abs(f) < 0.0001) return 1;
-        const x = Math.PI * f;
-        return Math.abs(Math.sin(x) / x);
+      const specH = 260;
+      const xUnitMax = 10;
+      const xSpec = (unit) => (unit / xUnitMax) * W;
+      const ySpec = (value) => specH - 24 - value * (specH - 54);
+      const sinc = (unit) => {
+        const x = Math.PI * unit / 4;
+        return Math.abs(x) < 1e-6 ? 1 : Math.abs(Math.sin(x) / x);
+      };
+      const envelope = window.VisualMath.makeSamples(0, xUnitMax, 360, (unit) => sinc(unit));
+      let specSvg = `<svg viewBox="0 0 ${W} ${specH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
+      specSvg += window.VisualMath.axes(W, specH, specH - 24, "f", "|Sп(f)|/U0");
+      specSvg += window.VisualMath.drawXYCurve(envelope, W, specH, 0, xUnitMax, 0, 1.08, "#7554aa", 2.4, 0.82);
+      for (let unit = 1; unit <= xUnitMax; unit++) {
+        const amp = sinc(unit) * (0.86 + 0.1 * Math.cos(unit * Math.PI / 2));
+        const x = xSpec(unit);
+        specSvg += `<line x1="${x}" y1="${specH - 24}" x2="${x}" y2="${ySpec(amp)}" stroke="#1f2b26" stroke-width="${unit % 4 === 0 ? 2.6 : 1.8}" />
+          <circle cx="${x}" cy="${ySpec(amp)}" r="2.6" fill="#1f2b26" />`;
+      }
+      [1, 2, 3, 4, 8].forEach((unit) => {
+        const label = unit === 4 ? "1/τсим" : unit === 8 ? "2/τсим" : `${unit}/Δt`;
+        specSvg += `<line x1="${xSpec(unit)}" y1="${specH - 24}" x2="${xSpec(unit)}" y2="${specH - 12}" stroke="#1f2b26" stroke-width="1.3" />
+          <text x="${xSpec(unit)}" y="${specH - 4}" fill="#31433b" font-family="monospace" font-size="12" text-anchor="middle">${label}</text>`;
       });
-      const extra = `<text x="${W - 18}" y="26" fill="#62716b" font-family="monospace" font-size="14" text-anchor="end">Δfц ≈ 1/τсим</text>`;
-      const specSvg = window.VisualMath.chartSvg({
-        W, H: specH, xMin: -fMax, xMax: fMax, yMin: 0, yMax: 1.08,
-        xLabel: "f", yLabel: "|B(f)|", samples, color: "#7554aa", width: 2.5, extra
-      });
+      specSvg += `<line x1="${xSpec(4)}" y1="20" x2="${xSpec(4)}" y2="${specH - 24}" stroke="#e74c3c" stroke-width="1.8" stroke-dasharray="6,6" />`;
+      specSvg += `</svg>`;
+      const p0 = SignalData.bit_probabilities?.zero ?? 0.5;
+      const p1 = SignalData.bit_probabilities?.one ?? 0.5;
+      const probH = 170;
+      const barW = W * 0.24;
+      const p0H = p0 * (probH - 46);
+      const p1H = p1 * (probH - 46);
+      let probSvg = `<svg viewBox="0 0 ${W} ${probH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
+      probSvg += window.VisualMath.axes(W, probH, probH - 24, "b", "p");
+      probSvg += `<rect x="${W * 0.22}" y="${probH - 24 - p0H}" width="${barW}" height="${p0H}" fill="#287c9f" fill-opacity="0.75" />
+        <rect x="${W * 0.56}" y="${probH - 24 - p1H}" width="${barW}" height="${p1H}" fill="#0c6b4f" fill-opacity="0.75" />
+        <text x="${W * 0.22 + barW / 2}" y="${probH - 8}" fill="#62716b" font-family="monospace" font-size="14" text-anchor="middle">0</text>
+        <text x="${W * 0.56 + barW / 2}" y="${probH - 8}" fill="#62716b" font-family="monospace" font-size="14" text-anchor="middle">1</text>
+        <line x1="${W * 0.16}" y1="${probH - 24 - 0.5 * (probH - 46)}" x2="${W * 0.86}" y2="${probH - 24 - 0.5 * (probH - 46)}" stroke="#e74c3c" stroke-width="1.6" stroke-dasharray="6,6" />`;
+      probSvg += `</svg>`;
+      const timingScale = `<dl class="visual-scale"><div><dt>Отсчёт</dt><dd>Δt=${dt.toFixed(4)} мс</dd></div><div><dt>Символ</dt><dd>τсим=${tauSim.toFixed(4)} мс</dd></div><div><dt>Код</dt><dd>4 бита на один уровень</dd></div></dl>`;
+      const zoomScale = `<dl class="visual-scale"><div><dt>Окно</dt><dd>биты ${zoom.start + 1}-${zoom.end}</dd></div><div><dt>Назначение</dt><dd>это же окно используется в блоках 06-08</dd></div></dl>`;
+      const spectrumScale = `<dl class="visual-scale"><div><dt>Огибающая</dt><dd>sin x / x</dd></div><div><dt>Первый ноль</dt><dd>1/τсим=${(1 / tauSim).toFixed(2)} кГц</dd></div><div><dt>Расчетная полоса</dt><dd>Δfц=${(2 / tauSim).toFixed(2)} кГц</dd></div></dl>`;
+      const probScale = `<dl class="visual-scale"><div><dt>p(0)</dt><dd>${p0.toFixed(4)}</dd></div><div><dt>p(1)</dt><dd>${p1.toFixed(4)}</dd></div><div><dt>Ожидание</dt><dd>для симметричного гауссовского входа близко к 0.5</dd></div></dl>`;
 
       return `<div class="stage-panel__visuals-stack">
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Маппинг квантованных уровней в 4-битные коды</p>${topSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Цифровой меандр b(t): четыре τсим на один Δt</p>${botSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Синхронная лупа: этот же фрагмент используют блоки 06–08</p>${zoomSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Амплитудный спектр прямоугольного цифрового сигнала</p>${specSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Маппинг квантованных уровней в 4-битные коды</p>${codeStrip}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Полная таблица безызбыточного блочного кода</p>${codeTable}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Матрица кодовых расстояний d_lm</p>${distanceTable}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Априорные вероятности битов p(0) и p(1)</p>${probScale}${probSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Цифровой меандр b(t): четыре τсим на один Δt</p>${timingScale}${botSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Синхронная лупа: этот же фрагмент используют блоки 06–08</p>${zoomScale}${zoomSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Амплитудный спектр прямоугольного цифрового сигнала</p>${spectrumScale}${specSvg}</div>
       </div>`;
     },
 
@@ -143,17 +232,22 @@
       const fd = 2 * alpha * dfg;
       const dt = 1 / fd;
       const tauSim = dt / 4;
-      const digitalBandwidth = 1 / tauSim;
+      const k1 = 2;
+      const digitalBandwidth = k1 / tauSim;
       const probabilities = SignalData.level_probabilities || [];
       const entropy = probabilities.reduce((acc, p) => p > 0 ? acc - p * Math.log2(p) : acc, 0);
-      const productivity = entropy / tauSim;
+      const productivity = entropy / dt;
       const redundancy = Math.max(0, 1 - entropy / 4);
+      const p0 = SignalData.bit_probabilities?.zero ?? 0.5;
+      const p1 = SignalData.bit_probabilities?.one ?? 0.5;
       let theory = "Кодер превращает номер уровня в безызбыточную 4-битную комбинацию. Один отсчёт Δt распадается на четыре прямоугольных символа, поэтому цифровой сигнал имеет широкий лепестковый спектр.";
       let formulas = `<div class="formula-preview"><span>Разрядность кодера</span>\\[ L = 16 \\implies \\mu = \\log_2(L) = 4 \\text{ бит} \\]</div>`;
       formulas += `<div class="formula-preview"><span>Длительность символа</span>\\[ \\tau_{сим} = \\frac{\\Delta t}{\\mu} = \\frac{${toLatexNumber(dt.toFixed(4))}}{4} \\approx ${toLatexNumber(tauSim.toFixed(4))} \\text{ мс} \\]</div>`;
-      formulas += `<div class="formula-preview"><span>Оценка ширины спектра цифрового сигнала</span>\\[ \\Delta f_ц \\sim \\frac{1}{\\tau_{сим}} \\approx ${toLatexNumber(digitalBandwidth.toFixed(2))} \\text{ кГц} \\]</div>`;
+      formulas += `<div class="formula-preview"><span>Оценка ширины спектра цифрового сигнала</span>\\[ \\Delta f_ц = \\frac{k_1}{\\tau_{сим}},\\quad k_1=${k1},\\quad \\Delta f_ц \\approx ${toLatexNumber(digitalBandwidth.toFixed(2))} \\text{ кГц} \\]</div>`;
       formulas += `<div class="formula-preview"><span>Энтропия квантованных сообщений</span>\\[ H_y=-\\sum_{j=0}^{15}p_j\\log_2p_j\\approx ${toLatexNumber(entropy.toFixed(3))}\\text{ бит/отсчёт} \\]</div>`;
-      formulas += `<div class="formula-preview"><span>Производительность и избыточность</span>\\[ R_y=\\frac{H_y}{\\tau_{сим}}\\approx ${toLatexNumber(productivity.toFixed(2))}\\text{ кбит/с}, \\quad \\zeta=1-\\frac{H_y}{\\mu}\\approx ${toLatexNumber(redundancy.toFixed(3))} \\]</div>`;
+      formulas += `<div class="formula-preview"><span>Кодовые расстояния</span>\\[ d_{lm}=\\sum_{r=1}^{\\mu} b_l^r\\oplus_2 b_m^r \\]</div>`;
+      formulas += `<div class="formula-preview"><span>Априорные вероятности битов</span>\\[ p(0)=\\frac{1}{\\mu}\\sum_{j=1}^{16}n_j(0)p_j\\approx ${toLatexNumber(p0.toFixed(4))},\\quad p(1)=\\frac{1}{\\mu}\\sum_{j=1}^{16}n_j(1)p_j\\approx ${toLatexNumber(p1.toFixed(4))} \\]</div>`;
+      formulas += `<div class="formula-preview"><span>Производительность и избыточность</span>\\[ R_y=\\frac{H_y}{\\Delta t}\\approx ${toLatexNumber(productivity.toFixed(2))}\\text{ кбит/с}, \\quad \\zeta=1-\\frac{H_y}{\\mu}\\approx ${toLatexNumber(redundancy.toFixed(3))} \\]</div>`;
       formulas += `<div class="stage-panel__info-box"><strong>Синхронная лупа:</strong><br>Нижний фрагмент показывает несколько соседних битов с теми же границами, которые используются в блоках 06–08. Поэтому радиоволна, шум, смесь и стробы детектора дальше сравниваются в одном и том же временном окне.</div>`;
       return { theory, formulas };
     }

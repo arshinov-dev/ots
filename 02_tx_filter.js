@@ -6,17 +6,33 @@
   window.StageHandlers['tx-filter'] = {
     process: function(params, SignalData) {
       const N = SignalData.N;
-      const dfg = parseFloat(params.signalBandwidth) || 28;
-      const Pg = parseFloat(params.signalPower) || 1.5;
-      const w2 = Math.max(3, Math.floor(800 / dfg));
+      const vm = window.VisualMath;
+      const dfg = vm.safeNumber(params.signalBandwidth, 28);
+      const Pg = vm.safeNumber(params.signalPower, 1.5);
       SignalData.x_t = new Array(N).fill(0);
-      for (let i = 0; i < N; i++) {
-        let sum = 0, count = 0;
-        for (let j = Math.max(0, i - w2); j <= Math.min(N - 1, i + w2); j++) {
-          sum += SignalData.g_t[j];
-          count++;
+
+      if (Array.isArray(SignalData.source_components) && SignalData.source_components.length) {
+        const kept = SignalData.source_components.filter((component) => component.frequency <= dfg);
+        for (let i = 0; i < N; i++) {
+          const t = vm.indexToTimeMs(i, N, params);
+          let value = 0;
+          for (const component of kept) {
+            value += component.amplitude * Math.cos(2 * Math.PI * component.frequency * t + component.phase);
+          }
+          SignalData.x_t[i] = value;
         }
-        SignalData.x_t[i] = sum / count;
+        const mean = SignalData.x_t.reduce((a, b) => a + b, 0) / N;
+        for (let i = 0; i < N; i++) SignalData.x_t[i] -= mean;
+      } else {
+        const w2 = Math.max(3, Math.floor(800 / dfg));
+        for (let i = 0; i < N; i++) {
+          let sum = 0, count = 0;
+          for (let j = Math.max(0, i - w2); j <= Math.min(N - 1, i + w2); j++) {
+            sum += SignalData.g_t[j];
+            count++;
+          }
+          SignalData.x_t[i] = sum / count;
+        }
       }
 
       const err = SignalData.g_t.reduce((acc, value, index) => acc + Math.pow(value - SignalData.x_t[index], 2), 0) / N;
@@ -25,6 +41,8 @@
       const analyticRel = window.VisualMath.getAnalyticFilterError(params);
       SignalData.filter_error_analytic_sq = analyticRel;
       SignalData.filter_error_analytic_abs = analyticRel * Pg;
+      SignalData.filtered_power_analytic = Math.max(0, Pg - SignalData.filter_error_analytic_abs);
+      SignalData.filtered_power_empirical = SignalData.x_t.reduce((acc, value) => acc + value * value, 0) / N;
     },
 
     renderSVG: function(id, params, helpers, SignalData) {
@@ -32,37 +50,43 @@
       const vm = window.VisualMath;
       const Pg = vm.safeNumber(params.signalPower, 1.5);
       const dfg = vm.safeNumber(params.signalBandwidth, 28);
+      const epsAbs = SignalData.filter_error_analytic_abs || 0;
+      const Px = SignalData.filtered_power_analytic || Math.max(0, Pg - epsAbs);
 
       let timeSvg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
       timeSvg += vm.axes(W, H, yZero, "t", "u(t)");
       timeSvg += drawCurveSVG(SignalData.g_t, '#287c9f', 2.5, 0.25);
       timeSvg += drawCurveSVG(SignalData.x_t, '#0c6b4f', 2.8);
-      timeSvg += `<rect x="${W - 220}" y="15" width="200" height="56" fill="#ffffff" fill-opacity="0.88" rx="6" stroke="#d5ddd8" />
-        <line x1="${W - 202}" y1="31" x2="${W - 172}" y2="31" stroke="#287c9f" stroke-width="2.5" stroke-opacity="0.3" />
-        <text x="${W - 162}" y="36" fill="#62716b" font-family="monospace" font-size="13">g(t) до ФНЧ</text>
-        <line x1="${W - 202}" y1="53" x2="${W - 172}" y2="53" stroke="#0c6b4f" stroke-width="2.8" />
-        <text x="${W - 162}" y="58" fill="#62716b" font-family="monospace" font-size="13">x(t) после ФНЧ</text>`;
       timeSvg += `</svg>`;
 
-      const fMax = Math.max(dfg * 2.4, 40);
+      let errorSvg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
+      errorSvg += vm.axes(W, H, yZero, "t", "g(t)-x(t)");
+      errorSvg += drawCurveSVG(SignalData.g_t.map((value, index) => value - SignalData.x_t[index]), '#e74c3c', 2.3, 0.9);
+      errorSvg += `</svg>`;
+
+      const fMax = vm.getSpectrumWindow(params).max;
       const Hf = 240;
-      const y = (value) => Hf - ((value - 0) / (Pg * 1.08)) * Hf;
+      const spectrumSamples = vm.makeSamples(-fMax, fMax, 320, (f) => vm.spectrumValue(f, params));
+      const spectrumPeak = Math.max(...spectrumSamples.map(([, y]) => y), 0.0001);
+      const y = (value) => Hf - ((value - 0) / (spectrumPeak * 1.08)) * Hf;
       const x = (frequency) => ((frequency + fMax) / (2 * fMax)) * W;
-      const spectrumSamples = vm.makeSamples(-fMax, fMax, 260, (f) => vm.spectrumValue(f, params));
       let freqSvg = `<svg viewBox="0 0 ${W} ${Hf}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
       freqSvg += vm.axes(W, Hf, Hf - 18, "f", "G(f)");
-      freqSvg += vm.drawXYCurve(spectrumSamples, W, Hf, -fMax, fMax, 0, Pg * 1.08, "#287c9f", 2.4, 0.28);
-      const passY = y(Pg * 0.96);
-      freqSvg += `<path d="M ${x(-fMax)} ${Hf - 18} L ${x(-dfg)} ${Hf - 18} L ${x(-dfg)} ${passY} L ${x(dfg)} ${passY} L ${x(dfg)} ${Hf - 18} L ${x(fMax)} ${Hf - 18}" stroke="#0c6b4f" stroke-width="3" fill="rgba(12,107,79,0.08)" stroke-linejoin="round" />
+      freqSvg += vm.drawXYCurve(spectrumSamples, W, Hf, -fMax, fMax, 0, spectrumPeak * 1.08, "#287c9f", 2.4, 0.4);
+      const passSamples = spectrumSamples.map(([f, value]) => [f, Math.abs(f) <= dfg ? value : 0]);
+      const tailSamples = spectrumSamples.map(([f, value]) => [f, Math.abs(f) > dfg ? value : 0]);
+      freqSvg += vm.drawXYCurve(passSamples, W, Hf, -fMax, fMax, 0, spectrumPeak * 1.08, "#0c6b4f", 3, 1);
+      freqSvg += `<path d="${tailSamples.map(([f, value], index) => `${index === 0 ? "M" : "L"} ${x(f)} ${y(value)}`).join(" ")} L ${W} ${Hf - 18} L 0 ${Hf - 18} Z" fill="rgba(231,76,60,0.16)" stroke="none" />`;
+      freqSvg += `<rect x="${x(-dfg)}" y="20" width="${Math.max(0, x(dfg) - x(-dfg))}" height="${Hf - 38}" fill="rgba(12,107,79,0.08)" stroke="#0c6b4f" stroke-width="2" />
         <line x1="${x(-dfg)}" y1="20" x2="${x(-dfg)}" y2="${Hf - 18}" stroke="#e74c3c" stroke-width="1.5" stroke-dasharray="5,6" />
-        <line x1="${x(dfg)}" y1="20" x2="${x(dfg)}" y2="${Hf - 18}" stroke="#e74c3c" stroke-width="1.5" stroke-dasharray="5,6" />
-        <text x="${W / 2}" y="28" fill="#e74c3c" font-family="monospace" font-size="14" text-anchor="middle">f_cp = Δf_g = ${dfg.toFixed(2)}</text>
-        <text x="${x(dfg) + 10}" y="${passY - 8}" fill="#0c6b4f" font-family="monospace" font-size="14">идеальный ФНЧ</text>`;
+        <line x1="${x(dfg)}" y1="20" x2="${x(dfg)}" y2="${Hf - 18}" stroke="#e74c3c" stroke-width="1.5" stroke-dasharray="5,6" />`;
       freqSvg += `</svg>`;
+      const legend = `<dl class="visual-scale"><div><dt>До ФНЧ</dt><dd><span class="legend-line legend-line--source"></span>g(t)</dd></div><div><dt>После ФНЧ</dt><dd><span class="legend-line legend-line--filtered"></span>x(t), |f|≤Δfg</dd></div><div><dt>Энергия</dt><dd>Px≈${Px.toFixed(3)} В², εf²≈${epsAbs.toFixed(4)} В²</dd></div></dl>`;
 
       return `<div class="stage-panel__visuals-stack">
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Наложение во времени: g(t) и x(t)</p>${timeSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Ограничение спектра идеальным ФНЧ</p>${freqSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Наложение во времени: g(t) и x(t)</p>${legend}${timeSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Ограничение спектра идеальным ФНЧ</p>${legend}${freqSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Потерянная часть реализации ε_f(t)=g(t)-x(t)</p>${legend}${errorSvg}</div>
       </div>`;
     },
 
@@ -71,10 +95,12 @@
       const Pg = parseFloat(params.signalPower) || 1.5;
       const eps = SignalData.filter_error_analytic_sq || window.VisualMath.getAnalyticFilterError(params);
       const epsAbs = SignalData.filter_error_analytic_abs || eps * Pg;
+      const Px = SignalData.filtered_power_analytic || Math.max(0, Pg - epsAbs);
       let theory = "Передающий ФНЧ оставляет основную полосу сообщения и подавляет высокочастотные составляющие. На временном графике это выглядит как сглаживание, а на спектре — как прямоугольное окно пропускания.";
       let formulas = `<div class="formula-preview"><span>Частота среза ФНЧ</span>\\[ f_{cp} = \\Delta f_g = ${toLatexNumber(dfg)} \\text{ кГц} \\]</div>`;
-      formulas += `<div class="formula-preview"><span>Аналитическая ошибка фильтрации</span>\\[ \\varepsilon_f^2 = 2\\int_{f_{cp}}^{\\infty}G_g(f)df \\approx ${toLatexNumber(epsAbs.toFixed(4))} \\text{ В}^2, \\quad \\frac{\\varepsilon_f^2}{P_g}\\approx ${toLatexNumber(eps.toFixed(4))} \\]</div>`;
-      formulas += `<div class="stage-panel__info-box"><strong>Связь с графиком:</strong><br>Зелёный прямоугольник на спектре — это полоса \\(|f|\\le f_{cp}\\). Расчётная ошибка берётся как энергия спектрального хвоста за этой полосой, а не как сумма расхождений конкретной случайной реализации.</div>`;
+      formulas += `<div class="formula-preview"><span>Мощность после идеального ФНЧ</span>\\[ P_x = 2\\int_{0}^{f_{cp}}G_g(f)df \\approx ${toLatexNumber(Px.toFixed(4))} \\text{ В}^2 \\]</div>`;
+      formulas += `<div class="formula-preview"><span>Аналитическая ошибка фильтрации</span>\\[ \\varepsilon_f^2 = 2\\int_{f_{cp}}^{\\infty}G_g(f)df = P_g-P_x \\approx ${toLatexNumber(epsAbs.toFixed(4))} \\text{ В}^2, \\quad \\frac{\\varepsilon_f^2}{P_g}\\approx ${toLatexNumber(eps.toFixed(4))} \\]</div>`;
+      formulas += `<div class="stage-panel__info-box"><strong>Связь с графиком:</strong><br>Зелёная область на спектре даёт \\(P_x\\), красная область за \\(\\pm f_{cp}\\) даёт \\(\\varepsilon_f^2\\). Временной график строится из тех же спектральных составляющих, поэтому \\(g(t)\\) и \\(x(t)\\) связаны напрямую.</div>`;
       return { theory, formulas };
     }
   };

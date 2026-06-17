@@ -15,7 +15,29 @@
       const alpha = safeNumber(params.samplingIncrease, 2);
       const dfg = safeNumber(params.signalBandwidth, 28);
       const fd = Math.max(1, 2 * alpha * dfg);
-      return Math.max(6, Math.floor(2500 / fd));
+      const samplesInWindow = Math.max(6, fd * getTimeSpanMs(params));
+      return Math.max(3, Math.floor(1000 / samplesInWindow));
+    }
+
+    function getTimeSpanMs(params) {
+      const dfg = Math.max(1, safeNumber(params.signalBandwidth, 28));
+      return clamp(20 / dfg, 0.35, 1.25);
+    }
+
+    function indexToTimeMs(index, count, params) {
+      const n = Math.max(1, count - 1);
+      return (index / n) * getTimeSpanMs(params);
+    }
+
+    function hashNoise(index, salt = 0) {
+      const x = Math.sin((index + 1) * 127.1 + (salt + 1) * 311.7) * 43758.5453123;
+      return x - Math.floor(x);
+    }
+
+    function deterministicNormal(index, salt = 0) {
+      const u1 = Math.max(1e-6, hashNoise(index, salt));
+      const u2 = hashNoise(index + 173, salt + 19);
+      return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
     }
 
     function getCorrelationKind(params) {
@@ -37,19 +59,19 @@
           title: "экспоненциальная корреляционная функция",
           k: 2,
           spectrumLatex: String.raw`G_g(f)=\dfrac{2P_g\beta}{\beta^2+(2\pi f)^2}`,
-          etaLatex: String.raw`\eta=\dfrac{1}{1-\exp\left(-\dfrac{1}{2\alpha^2}\right)}`,
+          etaLatex: String.raw`\eta=\dfrac{1}{\sqrt{1-\exp\left(-\dfrac{1}{2\alpha^2}\right)}}`,
         },
         cosineSquared: {
           title: "ограниченная функция вида cos^2",
           k: 1.5,
           spectrumLatex: String.raw`G_g(f)=\mathcal{F}\left\{P_g\cos^2(\pi\beta\tau)\right\}`,
-          etaLatex: String.raw`\eta=\dfrac{1}{1-\cos^2\left(\dfrac{\pi}{3\alpha}\right)}`,
+          etaLatex: String.raw`\eta=\dfrac{1}{\sqrt{1-\cos^2\left(\dfrac{\pi}{3\alpha}\right)}}`,
         },
         gaussian: {
           title: "гауссовская корреляционная функция",
           k: 1,
           spectrumLatex: String.raw`G_g(f)=\dfrac{P_g\sqrt{2\pi}}{\beta}\exp\left(-\dfrac{2\pi^2f^2}{\beta^2}\right)`,
-          etaLatex: String.raw`\eta=\dfrac{1}{1-\exp\left(-\dfrac{1}{2\alpha^2}\right)}`,
+          etaLatex: String.raw`\eta=\dfrac{1}{\sqrt{1-\exp\left(-\dfrac{1}{2\alpha^2}\right)}}`,
         },
         sinc: {
           title: "sinc-корреляционная функция",
@@ -67,19 +89,19 @@
           title: "дробно-косинусная корреляционная функция",
           k: 4,
           spectrumLatex: String.raw`G_g(f)=\mathcal{F}\left\{\dfrac{P_g\cos(2\pi\beta\tau)}{1-(4\beta\tau)^2}\right\}`,
-          etaLatex: String.raw`\eta=\dfrac{1}{1-\cos^2\left(\dfrac{\pi}{3\alpha}\right)}`,
+          etaLatex: String.raw`\eta=\dfrac{1}{\sqrt{1-\cos^2\left(\dfrac{\pi}{3\alpha}\right)}}`,
         },
         cosineLimited: {
           title: "ограниченная косинусная корреляционная функция",
           k: 3,
           spectrumLatex: String.raw`G_g(f)=\mathcal{F}\left\{P_g\cos(2\pi\beta\tau), |\tau|\le\dfrac{1}{4\beta}\right\}`,
-          etaLatex: String.raw`\eta=\dfrac{1}{1-\cos^2\left(\dfrac{\pi}{3\alpha}\right)}`,
+          etaLatex: String.raw`\eta=\dfrac{1}{\sqrt{1-\cos^2\left(\dfrac{\pi}{3\alpha}\right)}}`,
         },
         exponentialLinear: {
           title: "экспоненциально-линейная корреляционная функция",
           k: 2,
           spectrumLatex: String.raw`G_g(f)=\mathcal{F}\left\{P_g(1-\beta|\tau|)e^{-\beta|\tau|}\right\}`,
-          etaLatex: String.raw`\eta=\dfrac{1}{1-\exp\left(-\dfrac{1}{2\alpha^2}\right)}`,
+          etaLatex: String.raw`\eta=\dfrac{1}{\sqrt{1-\exp\left(-\dfrac{1}{2\alpha^2}\right)}}`,
         },
       };
       const meta = metas[kind] || metas.exponential;
@@ -111,10 +133,16 @@
 
     function getAnalyticFilterError(params) {
       const dfg = safeNumber(params.signalBandwidth, 28);
-      const fMax = Math.max(dfg * 40, 200);
+      const fMax = getSpectrumWindow(params).max;
       const total = 2 * integratePositive((f) => spectrumValue(f, params), 0, fMax);
       const tail = 2 * integratePositive((f) => spectrumValue(f, params), dfg, fMax);
       return total > 0 ? tail / total : 0;
+    }
+
+    function getSpectrumWindow(params) {
+      const beta = Math.max(1, safeNumber(params.beta, 14));
+      const dfg = Math.max(1, safeNumber(params.signalBandwidth, 28));
+      return { max: Math.max(dfg * 3.2, beta * 5, 60), cutoff: dfg };
     }
 
     function getEta(params) {
@@ -122,18 +150,18 @@
       const kind = getCorrelationKind(params);
       if (["cosineSquared", "cosineRatio", "cosineLimited"].includes(kind)) {
         const denominator = 1 - Math.pow(Math.cos(Math.PI / (3 * alpha)), 2);
-        return denominator > 0 ? 1 / denominator : 1;
+        return denominator > 0 ? 1 / Math.sqrt(denominator) : 1;
       }
       if (["sinc", "sincSquared"].includes(kind)) return 1;
       const denominator = 1 - Math.exp(-1 / (2 * alpha * alpha));
-      return denominator > 0 ? 1 / denominator : 1;
+      return denominator > 0 ? 1 / Math.sqrt(denominator) : 1;
     }
 
-    function getLevelProbabilitiesAnalytic(params, levels, dU) {
+    function getLevelProbabilitiesAnalytic(params, thresholds, levels) {
       const sigma = Math.sqrt(safeNumber(params.signalPower, 1.5));
       return levels.map((level, index) => {
-        const left = index === 0 ? -Infinity : level - dU / 2;
-        const right = index === levels.length - 1 ? Infinity : level + dU / 2;
+        const left = index === 0 ? -Infinity : thresholds[index - 1];
+        const right = index === levels.length - 1 ? Infinity : thresholds[index];
         const cdfRight = right === Infinity ? 1 : normalCdf(right / sigma);
         const cdfLeft = left === -Infinity ? 0 : normalCdf(left / sigma);
         return Math.max(0, cdfRight - cdfLeft);
@@ -180,27 +208,42 @@
 
     function spectrumValue(frequency, params) {
       const Pg = safeNumber(params.signalPower, 1.5);
-      const dfg = Math.max(1, safeNumber(params.signalBandwidth, 28));
-      const x = Math.abs(frequency) / dfg;
+      const beta = Math.max(1, safeNumber(params.beta, 14));
+      const f = Math.abs(frequency);
       const kind = getCorrelationKind(params);
 
-      let shape = 0;
-      if (kind === "exponential") shape = 1 / (1 + Math.pow(2.4 * x, 2));
-      else if (kind === "cosineSquared") shape = x <= 1 ? 0.5 + 0.5 * Math.cos(Math.PI * x) : 0;
-      else if (kind === "gaussian") shape = Math.exp(-2.2 * x * x);
-      else if (kind === "sinc") shape = x <= 1 ? 1 : 0.06 * Math.exp(-2 * (x - 1));
-      else if (kind === "sincSquared") shape = x <= 1 ? 1 - x : 0;
-      else if (kind === "cosineRatio") shape = x <= 1.2 ? 0.5 + 0.5 * Math.cos(Math.PI * x / 1.2) : 0;
-      else if (kind === "cosineLimited") shape = x <= 1 ? Math.pow(Math.cos(Math.PI * x / 2), 2) : 0;
-      else if (kind === "exponentialLinear") shape = 1 / Math.pow(1 + Math.pow(1.8 * x, 2), 2);
-      return Pg * Math.max(0, shape);
+      if (kind === "exponential") return (2 * Pg * beta) / (beta * beta + Math.pow(2 * Math.PI * f, 2));
+      if (kind === "gaussian") return (Pg * Math.sqrt(2 * Math.PI) / beta) * Math.exp(-2 * Math.PI * Math.PI * f * f / (beta * beta));
+      if (kind === "sinc") return f <= beta ? Pg / (2 * beta) : 0;
+
+      const tauMax = kind === "cosineSquared" ? 0.5 / beta
+        : kind === "cosineLimited" ? 0.25 / beta
+        : kind === "sincSquared" ? 5 / beta
+        : kind === "cosineRatio" ? 2 / beta
+        : kind === "exponentialLinear" ? 8 / beta
+        : 8 / beta;
+      const value = 2 * integratePositive((tau) => correlationValue(tau, params) * Math.cos(2 * Math.PI * f * tau), 0, tauMax, 220);
+      return Math.max(0, value);
     }
 
     function axes(W, H, yZero, xLabel, yLabel) {
-      return `<line x1="0" y1="${yZero}" x2="${W}" y2="${yZero}" stroke="#d5ddd8" stroke-width="2" />
-        <line x1="2" y1="0" x2="2" y2="${H}" stroke="#d5ddd8" stroke-width="2" />
-        <text x="${W - 30}" y="${yZero - 12}" fill="#62716b" font-family="monospace" font-size="15">${xLabel}</text>
-        <text x="14" y="24" fill="#62716b" font-family="monospace" font-size="15">${yLabel}</text>`;
+      const yAxis = clamp(yZero, 18, H - 24);
+      let svg = `<rect x="1" y="1" width="${W - 2}" height="${H - 2}" fill="none" stroke="#1f2b26" stroke-width="1.4" />`;
+      for (let i = 1; i < 6; i++) {
+        const x = (W / 6) * i;
+        svg += `<line x1="${x}" y1="1" x2="${x}" y2="${H - 1}" stroke="#b8c0bc" stroke-width="1" />`;
+      }
+      for (let i = 1; i < 5; i++) {
+        const y = (H / 5) * i;
+        svg += `<line x1="1" y1="${y}" x2="${W - 1}" y2="${y}" stroke="#b8c0bc" stroke-width="1" />`;
+      }
+      svg += `<line x1="0" y1="${yAxis}" x2="${W}" y2="${yAxis}" stroke="#1f2b26" stroke-width="1.8" />
+        <line x1="2" y1="0" x2="2" y2="${H}" stroke="#1f2b26" stroke-width="1.8" />
+        <path d="M ${W - 10} ${yAxis - 4} L ${W} ${yAxis} L ${W - 10} ${yAxis + 4}" fill="none" stroke="#1f2b26" stroke-width="1.8" />
+        <path d="M -2 10 L 2 0 L 6 10" fill="none" stroke="#1f2b26" stroke-width="1.8" />
+        <text x="${W - 36}" y="${Math.max(18, yAxis - 12)}" fill="#31433b" font-family="monospace" font-size="15">${xLabel}</text>
+        <text x="14" y="24" fill="#31433b" font-family="monospace" font-size="15">${yLabel}</text>`;
+      return svg;
     }
 
     function drawXYCurve(samples, W, H, xMin, xMax, yMin, yMax, color, width = 2.5, alpha = 1) {
@@ -232,44 +275,68 @@
       return svg;
     }
 
-    return { clamp, safeNumber, getSampleStep, getCorrelationKind, getCorrelationMeta, normalCdf, laplacePhi, getAnalyticFilterError, getEta, getLevelProbabilitiesAnalytic, getZoomWindow, correlationValue, spectrumValue, axes, drawXYCurve, makeSamples, chartSvg };
+    return { clamp, safeNumber, getSampleStep, getTimeSpanMs, indexToTimeMs, hashNoise, deterministicNormal, getCorrelationKind, getCorrelationMeta, normalCdf, laplacePhi, getAnalyticFilterError, getSpectrumWindow, getEta, getLevelProbabilitiesAnalytic, getZoomWindow, correlationValue, spectrumValue, axes, drawXYCurve, makeSamples, chartSvg };
   })();
 
   window.StageHandlers.source = {
     process: function(params, SignalData) {
       const N = SignalData.N;
-      const dfg = parseFloat(params.signalBandwidth) || 28;
-      const Pg = parseFloat(params.signalPower) || 1.5;
+      const vm = window.VisualMath;
+      const dfg = vm.safeNumber(params.signalBandwidth, 28);
+      const Pg = vm.safeNumber(params.signalPower, 1.5);
       const sigmaG = Math.sqrt(Pg);
       SignalData.yMax = 4 * sigmaG;
       SignalData.yMin = -4 * sigmaG;
 
       SignalData.g_t = new Array(N).fill(0);
-      for (let i = 0; i < N; i++) {
-        let u = 0, v = 0;
-        while (u === 0) u = Math.random();
-        while (v === 0) v = Math.random();
-        SignalData.g_t[i] = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+      const spectrumWindow = vm.getSpectrumWindow(params);
+      const componentCount = 96;
+      const df = spectrumWindow.max / componentCount;
+      const components = [];
+
+      for (let m = 0; m < componentCount; m++) {
+        const frequency = (m + 0.5) * df;
+        const spectralDensity = vm.spectrumValue(frequency, params);
+        const baseAmplitude = Math.sqrt(Math.max(0, 2 * spectralDensity * df));
+        const jitter = 0.75 + 0.5 * vm.hashNoise(m, 7);
+        components.push({
+          frequency,
+          amplitude: baseAmplitude * jitter,
+          phase: 2 * Math.PI * vm.hashNoise(m, 13),
+        });
       }
 
-      const smoothed = new Array(N).fill(0);
-      const w1 = Math.max(3, Math.floor(600 / dfg));
       for (let i = 0; i < N; i++) {
-        let sum = 0, count = 0;
-        for (let j = Math.max(0, i - w1); j <= Math.min(N - 1, i + w1); j++) {
-          sum += SignalData.g_t[j];
-          count++;
+        const t = vm.indexToTimeMs(i, N, params);
+        let value = 0;
+        for (const component of components) {
+          value += component.amplitude * Math.cos(2 * Math.PI * component.frequency * t + component.phase);
         }
-        smoothed[i] = sum / count;
+        SignalData.g_t[i] = value;
       }
 
-      const mean = smoothed.reduce((a, b) => a + b) / N;
-      const variance = smoothed.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / N;
+      const mean = SignalData.g_t.reduce((a, b) => a + b, 0) / N;
+      const variance = SignalData.g_t.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / N;
       const currentStdDev = Math.sqrt(variance) || 1;
+      const scale = sigmaG / currentStdDev;
 
       for (let i = 0; i < N; i++) {
-        SignalData.g_t[i] = ((smoothed[i] - mean) / currentStdDev) * sigmaG;
+        SignalData.g_t[i] = (SignalData.g_t[i] - mean) * scale;
       }
+      SignalData.source_components = components.map((component) => ({ ...component, amplitude: component.amplitude * scale }));
+      SignalData.source_time_span_ms = vm.getTimeSpanMs(params);
+      SignalData.source_sigma = sigmaG;
+      let spectralEnergy = 0;
+      let previousF = 0;
+      let previousY = vm.spectrumValue(0, params);
+      for (let i = 1; i <= 360; i++) {
+        const f = (i / 360) * spectrumWindow.max;
+        const y = vm.spectrumValue(f, params);
+        spectralEnergy += (f - previousF) * (y + previousY) / 2;
+        previousF = f;
+        previousY = y;
+      }
+      SignalData.source_spectrum_energy = 2 * spectralEnergy;
     },
 
     renderSVG: function(id, params, helpers, SignalData) {
@@ -284,11 +351,8 @@
       timeSvg += vm.axes(W, H, yZero, "t", "g(t)");
       const yPlus = getY(3 * sigmaG);
       const yMinus = getY(-3 * sigmaG);
-      const valLabel = (3 * sigmaG).toFixed(2);
       timeSvg += `<line x1="0" y1="${yPlus}" x2="${W}" y2="${yPlus}" stroke="#d5ddd8" stroke-dasharray="8,8" stroke-width="1.5" />`;
-      timeSvg += `<text x="15" y="${yPlus - 8}" fill="#62716b" font-family="monospace" font-size="14">+3σ_g (${valLabel} В)</text>`;
       timeSvg += `<line x1="0" y1="${yMinus}" x2="${W}" y2="${yMinus}" stroke="#d5ddd8" stroke-dasharray="8,8" stroke-width="1.5" />`;
-      timeSvg += `<text x="15" y="${yMinus + 16}" fill="#62716b" font-family="monospace" font-size="14">-3σ_g (-${valLabel} В)</text>`;
       timeSvg += drawCurveSVG(SignalData.g_t, '#287c9f', 2.5);
       timeSvg += `</svg>`;
 
@@ -301,20 +365,30 @@
 
       const fMax = Math.max(dfg * 2.4, beta * 4);
       const spectrumSamples = vm.makeSamples(-fMax, fMax, 260, (f) => vm.spectrumValue(f, params));
+      const spectrumPeak = Math.max(...spectrumSamples.map(([, y]) => y), 0.0001);
       const dfgX = (f) => ((f + fMax) / (2 * fMax)) * W;
       const spectrumExtra = `<line x1="${dfgX(-dfg)}" y1="18" x2="${dfgX(-dfg)}" y2="202" stroke="#e74c3c" stroke-width="1.5" stroke-dasharray="5,6" />
         <line x1="${dfgX(dfg)}" y1="18" x2="${dfgX(dfg)}" y2="202" stroke="#e74c3c" stroke-width="1.5" stroke-dasharray="5,6" />
-        <line x1="${dfgX(-dfg)}" y1="28" x2="${dfgX(dfg)}" y2="28" stroke="#e74c3c" stroke-width="1.5" />
-        <text x="${W / 2}" y="22" fill="#e74c3c" font-family="monospace" font-size="14" text-anchor="middle">Δf_g = ${dfg.toFixed(2)}</text>`;
+        <line x1="${dfgX(-dfg)}" y1="28" x2="${dfgX(dfg)}" y2="28" stroke="#e74c3c" stroke-width="1.5" />`;
       const spectrumSvg = vm.chartSvg({
-        W, H: 220, xMin: -fMax, xMax: fMax, yMin: 0, yMax: Pg * 1.08,
+        W, H: 220, xMin: -fMax, xMax: fMax, yMin: 0, yMax: spectrumPeak * 1.1,
         xLabel: "f", yLabel: "G_g(f)", samples: spectrumSamples, color: "#287c9f", extra: spectrumExtra
       });
+      const pdfSamples = vm.makeSamples(-4 * sigmaG, 4 * sigmaG, 180, (u) => Math.exp(-u * u / (2 * Pg)) / (sigmaG * Math.sqrt(2 * Math.PI)));
+      const pdfPeak = 1 / (sigmaG * Math.sqrt(2 * Math.PI));
+      const pdfSvg = vm.chartSvg({
+        W, H: 220, xMin: -4 * sigmaG, xMax: 4 * sigmaG, yMin: 0, yMax: pdfPeak * 1.12,
+        xLabel: "u", yLabel: "W_g(u)", samples: pdfSamples, color: "#0c6b4f",
+        extra: `<line x1="${W * 0.125}" y1="18" x2="${W * 0.125}" y2="202" stroke="#e74c3c" stroke-width="1.3" stroke-dasharray="5,6" />
+          <line x1="${W * 0.875}" y1="18" x2="${W * 0.875}" y2="202" stroke="#e74c3c" stroke-width="1.3" stroke-dasharray="5,6" />`
+      });
+      const sourceScale = `<dl class="visual-scale"><div><dt>Разброс амплитуд</dt><dd>±3σg=±${(3 * sigmaG).toFixed(3)} В</dd></div><div><dt>Полоса сообщения</dt><dd>Δfg=${dfg.toFixed(2)} кГц</dd></div><div><dt>Окно времени</dt><dd>${vm.getTimeSpanMs(params).toFixed(3)} мс</dd></div></dl>`;
 
       return `<div class="stage-panel__visuals-stack">
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Временная диаграмма g(t)</p>${timeSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Корреляционная функция B_c(τ)</p>${corrSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Энергетический спектр G_g(f)</p>${spectrumSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Временная диаграмма g(t)</p>${sourceScale}${timeSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Корреляционная функция B_c(τ)</p>${sourceScale}${corrSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Энергетический спектр G_g(f)</p>${sourceScale}${spectrumSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Одномерная плотность вероятности W_g(u)</p>${sourceScale}${pdfSvg}</div>
       </div>`;
     },
 
@@ -324,11 +398,12 @@
       const dfg = parseFloat(params.signalBandwidth) || 28;
       const sigmaG = Math.sqrt(Pg);
       const meta = window.VisualMath.getCorrelationMeta(params);
+      const kActual = parseFloat(params.bandwidthFactor) || meta.k;
       let theory = "Источник моделирует сообщение как стационарный гауссовский процесс. Его форма важна сразу в трёх областях: во времени, через корреляцию и через спектральную плотность мощности.";
       let formulas = `<div class="formula-preview"><span>Мощность сигнала</span>\\[ P_g = \\sigma_g^2 = ${toLatexNumber(Pg)} \\text{ В}^2, \\quad \\sigma_g = ${toLatexNumber(sigmaG.toFixed(3))} \\text{ В} \\]</div>`;
       formulas += `<div class="formula-preview"><span>Корреляционная функция варианта</span>\\[ ${params.correlationFunction || "B_c(\\tau)"} \\]</div>`;
-      formulas += `<div class="formula-preview"><span>Ширина спектра по табличному коэффициенту формы</span>\\[ \\Delta f_g = k\\beta = ${toLatexNumber(meta.k)}\\cdot ${toLatexNumber(beta)} = ${toLatexNumber(dfg)} \\text{ кГц} \\]</div>`;
-      formulas += `<div class="stage-panel__info-box"><strong>Почему выбран этот k:</strong><br>В варианте задана ${meta.title}; для такой корреляционной функции методическая таблица задаёт коэффициент связи ширины спектра с параметром \\(\\beta\\): \\(k=${toLatexNumber(meta.k)}\\). Поэтому изменение \\(\\beta\\) или \\(k\\) в форме сразу меняет масштаб спектра на графике.</div>`;
+      formulas += `<div class="formula-preview"><span>Ширина спектра по коэффициенту формы</span>\\[ \\Delta f_g = k\\beta = ${toLatexNumber(kActual)}\\cdot ${toLatexNumber(beta)} = ${toLatexNumber(dfg)} \\text{ кГц} \\]</div>`;
+      formulas += `<div class="stage-panel__info-box"><strong>Почему такой k:</strong><br>В варианте задана ${meta.title}; табличное значение для этой формы корреляции: \\(k=${toLatexNumber(meta.k)}\\). Если поле \\(k\\) изменено вручную, графики используют фактическое значение из формы.</div>`;
       formulas += `<div class="formula-preview"><span>Аналитический результат Винера-Хинчина</span>\\[ G_g(f)=\\int_{-\\infty}^{\\infty}B_c(\\tau)e^{-j2\\pi f\\tau}d\\tau, \\qquad ${meta.spectrumLatex} \\]</div>`;
       return { theory, formulas };
     }
