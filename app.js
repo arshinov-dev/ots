@@ -59,7 +59,7 @@
     },
     encoder: {
       input: "уровни vₖʲ",
-      action: "каждый уровень заменяется 4-битной кодовой комбинацией",
+      action: "каждый уровень заменяется μ-битной кодовой комбинацией рассчитанной разрядности",
       output: "цифровой поток bₖᵘ",
       points: [
         "Сначала сопоставь уровень и кодовое слово.",
@@ -137,6 +137,7 @@
   let isApplyingVariant = false;
   let mathRenderTimeout;
   let currentStageId = stages[0].id; // Отслеживаем текущий выбранный этап
+  let lastChangedParam = null; // Последний изменённый параметр для подсветки зависимостей
 
   // Используем SignalData из data.js (глобальный объект window.SignalData)
   const SignalData = window.SignalData;
@@ -145,6 +146,146 @@
     DAM: { title: "ДАМ · дискретная амплитудная модуляция", description: "Двоичный код управляет амплитудой гармонической несущей.", primaryFrequencyLabel: "f<sub>0</sub>", primaryFrequencyDescription: "Несущая частота, МГц", receptions: [["KO", "КО · когерентный приём"], ["NO", "НО · некогерентный приём"]] },
     DCHM: { title: "ДЧМ · дискретная частотная модуляция", description: "Двоичный код переключает несущую между частотами f₁ и f₂.", primaryFrequencyLabel: "f<sub>2</sub>", primaryFrequencyDescription: "Нижняя несущая частота, МГц", receptions: [["KO", "КО · когерентный приём"], ["NO", "НО · некогерентный приём"]] },
     DOFM: { title: "ДОФМ · дискретная относительная фазовая модуляция", description: "Двоичный код управляет относительным изменением фазы несущей.", primaryFrequencyLabel: "f<sub>0</sub>", primaryFrequencyDescription: "Несущая частота, МГц", receptions: [["SF", "СФ · сравнение фаз"], ["SP", "СП · сравнение полярностей"]] },
+  };
+
+  // === Единое описание сигналов структурной схемы методички ===
+  // Используется только для одинаковых обозначений, кратких названий
+  // и классификации. Расчёты и массивы остаются в SignalData.
+  const SIGNAL_META = {
+    c:         { symbol: "c(t)",          name: "Сообщение источника",              type: "Непрерывное сообщение" },
+    g:         { symbol: "g(t)",          name: "Первичный электрический сигнал",   type: "Непрерывный случайный сигнал" },
+    x:         { symbol: "x(t)",          name: "Сигнал с ограниченным спектром",   type: "Непрерывный по времени и уровню" },
+    sampled:   { symbol: "x(kΔt)",        name: "Отсчёты сигнала",                   type: "Дискретный по времени, непрерывный по уровню" },
+    quantized: { symbol: "vₖʲ",           name: "Квантованная последовательность",   type: "Дискретный по времени и уровню" },
+    encoded:   { symbol: "bₖᵘ",           name: "Двоичная кодовая комбинация",       type: "Цифровой сигнал" },
+    carrier:   { symbol: "uₙ(t)",         name: "Гармоническая несущая",            type: "Непрерывное периодическое колебание" },
+    modulated: { symbol: "s(t,bₖᵘ)",      name: "Сигнал с дискретной модуляцией",    type: "Непрерывный физический сигнал" },
+    transmitted:{ symbol: "S(t)",          name: "Сигнал в линии связи",              type: "Непрерывный физический сигнал" },
+    noise:     { symbol: "n(t)",          name: "Помеха линии связи",               type: "Непрерывный случайный процесс" },
+    received:  { symbol: "z(t)",          name: "Смесь сигнала и помехи",            type: "Непрерывный случайный сигнал" },
+    detected:  { symbol: "ŝ(t,bₖᵘ)",     name: "Оценка модулированного сигнала",    type: "Непрерывный сигнал на выходе детектора" },
+    b_hat:     { symbol: "b̂ₖᵘ",          name: "Принятая кодовая комбинация",       type: "Цифровой сигнал" },
+    v_hat:     { symbol: "v̂ₖʲ",          name: "Восстановленный уровень",           type: "Дискретный по времени и уровню" },
+    x_hat:     { symbol: "x̂(t)",          name: "Ступенчатый сигнал ЦАП",            type: "Непрерывный по времени, дискретный по уровню" },
+    g_hat:     { symbol: "ĝ(t)",          name: "Восстановленное сообщение",         type: "Непрерывный по времени и уровню" },
+    c_hat:     { symbol: "ĉ(t)",          name: "Принятое сообщение",                type: "Непрерывное сообщение" },
+  };
+
+  // === Граф зависимостей параметров (только для подсветки и пояснения) ===
+  // Не выполняет расчёты — они остаются в этапах и calculations.js.
+  // Ключ — имя параметра, значение — массив непосредственно зависимых параметров.
+  const DEPENDENCIES = {
+    // Цепочка 1: Источник и спектр
+    Pg:          ["sigmaG", "Dg", "deltaU1"],
+    beta:        ["signalBandwidth", "filterError"],
+    signalBandwidth: ["filterError", "samplingFrequency"],
+    // Цепочка 2: Дискретизация
+    samplingIncrease: ["samplingFrequency", "eta", "samplingInterval"],
+    samplingFrequency: ["samplingInterval"],
+    samplingInterval: ["bitDuration"],
+    // Цепочка 3: Квантование и кодирование
+    eta:         ["conditionalStep", "mu"],
+    conditionalStep: ["mu"],
+    mu:          ["levelCount", "bitDuration", "digitalBandwidth", "quantizationNoise"],
+    bitDuration: ["digitalBandwidth"],
+    digitalBandwidth: ["modulatedBandwidth"],
+    // Цепочка 4: Модуляция и канал
+    modulatedBandwidth: ["noisePower", "channelCapacity", "signalPower", "Um"],
+    noiseDensity: ["noisePower"],
+    signalNoiseRatio: ["signalPower", "errorProbability"],
+    // Цепочка 5: Помехоустойчивость и восстановление
+    errorProbability: ["transmissionNoise"],
+    transmissionNoise: ["totalError"],
+    filterError:   ["totalError"],
+    quantizationNoise: ["totalError"],
+    totalError:    [],
+  };
+
+  // Метаданные этапов: сигналы, зависимости, мини-тракты
+  const STAGE_META = {
+    source: {
+      inputSignals: ["c"], outputSignals: ["g"],
+      dependsOn: ["Pg", "beta"], affects: ["sigmaG", "dfg", "filterError"],
+      signalChange: "Сообщение превращается в электрический случайный процесс. Форма сохраняет информацию, но физическая природа меняется.",
+    },
+    "tx-filter": {
+      inputSignals: ["g"], outputSignals: ["x"],
+      dependsOn: ["beta", "signalBandwidth"], affects: ["filterError", "samplingFrequency"],
+      signalChange: "Форма сигнала сохраняется, но высокочастотные составляющие спектра за пределами Δfg подавляются.",
+    },
+    sampler: {
+      inputSignals: ["x"], outputSignals: ["sampled"],
+      dependsOn: ["signalBandwidth", "samplingIncrease"], affects: ["samplingInterval", "bitDuration"],
+      signalChange: "Непрерывный сигнал превращается в последовательность отсчётов. Информация сохраняется при выполнении теоремы Котельникова.",
+    },
+    quantizer: {
+      inputSignals: ["sampled"], outputSignals: ["quantized"],
+      dependsOn: ["Pg", "eta", "samplingIncrease"], affects: ["mu", "bitDuration", "quantizationNoise"],
+      signalChange: "Отсчёты с произвольными значениями амплитуды заменяются ближайшими разрешёнными уровнями.",
+    },
+    encoder: {
+      inputSignals: ["quantized"], outputSignals: ["encoded"],
+      dependsOn: ["mu"], affects: ["bitDuration", "digitalBandwidth"],
+      signalChange: "Номер уровня превращается в μ-битное двоичное слово. Сигнал становится цифровым.",
+    },
+    modulator: {
+      inputSignals: ["encoded", "carrier"], outputSignals: ["modulated", "transmitted"],
+      dependsOn: ["digitalBandwidth", "signalNoiseRatio", "noiseDensity"], affects: ["modulatedBandwidth", "noisePower", "Um"],
+      signalChange: "Цифровой код управляет одним из параметров несущей. Форма зависит от вида модуляции.",
+      miniTract: [
+        { node: "bₖᵘ", label: "Модулятор", out: "s(t,bₖᵘ)" },
+        { node: null, label: "Выход ПДУ", out: "S(t)" },
+      ],
+      extraInput: "uₙ(t)",
+    },
+    channel: {
+      inputSignals: ["transmitted"], outputSignals: ["received"],
+      dependsOn: ["modulatedBandwidth", "noiseDensity", "signalNoiseRatio"], affects: ["noisePower", "signalPower", "errorProbability"],
+      signalChange: "Сигнал проходит через линию связи и смешивается с аддитивным гауссовским шумом.",
+      miniTract: [
+        { node: "S(t)", label: "Ослабление χ", out: "χS(t)" },
+        { node: null, label: "+ n(t)", out: "z(t)" },
+      ],
+      extraInput: "n(t)",
+    },
+    detector: {
+      inputSignals: ["received"], outputSignals: ["b_hat"],
+      dependsOn: ["signalNoiseRatio", "Um"], affects: ["errorProbability", "transmissionNoise"],
+      signalChange: "Детектор формирует отклик, из которого решающее устройство восстанавливает биты.",
+      miniTract: [
+        { node: "z(t)", label: "Вход ПРУ", out: "ŝ(t,bₖᵘ)" },
+        { node: null, label: "Детектор → РУ", out: "b̂ₖᵘ" },
+      ],
+    },
+    decoder: {
+      inputSignals: ["b_hat"], outputSignals: ["v_hat", "x_hat"],
+      dependsOn: ["mu", "errorProbability"], affects: ["transmissionNoise", "totalError"],
+      signalChange: "Кодовые слова переводятся обратно в уровни, затем интерполятор формирует ступенчатый сигнал.",
+      miniTract: [
+        { node: "b̂ₖᵘ", label: "Декодер", out: "v̂ₖʲ" },
+        { node: null, label: "Интерполятор", out: "x̂(t)" },
+      ],
+    },
+    recipient: {
+      inputSignals: ["x_hat"], outputSignals: ["g_hat", "c_hat"],
+      dependsOn: ["signalBandwidth", "filterError", "quantizationNoise", "transmissionNoise"], affects: ["totalError"],
+      signalChange: "Ступенчатый сигнал сглаживается приёмным ФНЧ, образуя непрерывную оценку сообщения.",
+      miniTract: [
+        { node: "x̂(t)", label: "Приёмный ФНЧ", out: "ĝ(t)" },
+        { node: null, label: "Выходной преобразователь", out: "ĉ(t)" },
+      ],
+    },
+  };
+
+  // Описание изменения параметров для подсветки (краткие физические пояснения)
+  const PARAM_CHANGE_NOTES = {
+    Pg: "Изменение мощности сигнала пересчитывает σg, динамический диапазон и шаг квантования.",
+    beta: "Изменение β меняет ширину спектра Δfg, что влияет на ошибку фильтрации и частоту дискретизации.",
+    signalBandwidth: "Полоса сигнала определяет ошибку фильтрации и частоту дискретизации.",
+    samplingIncrease: "Изменение α меняет частоту дискретизации, интервал Δt, поправку η и разрядность μ.",
+    signalNoiseRatio: "Изменение h² пересчитывает мощность сигнала, амплитуду и вероятность ошибки.",
+    noiseDensity: "Изменение N0 меняет мощность шума в полосе канала.",
+    mu: "Разрядность определяет число уровней, длительность символа и ширину цифрового спектра.",
   };
 
   const correlationGroups = {
@@ -269,6 +410,93 @@
     return notes[params.modulation] || "";
   }
 
+  // === Рендер мини-тракта для объединённых карточек ===
+  function renderMiniTract(stageId) {
+    const meta = STAGE_META[stageId];
+    if (!meta || !meta.miniTract) return "";
+    const tract = meta.miniTract;
+    let html = `<div class="mini-tract">`;
+    // Входной сигнал
+    const firstNode = tract[0];
+    html += `<span class="mini-tract__signal">${firstNode.node}</span>`;
+    for (let i = 0; i < tract.length; i++) {
+      const step = tract[i];
+      html += `<span class="mini-tract__arrow">→</span>`;
+      html += `<span class="mini-tract__box">${escapeHtml(step.label)}</span>`;
+      html += `<span class="mini-tract__arrow">→</span>`;
+      html += `<span class="mini-tract__signal">${step.out}</span>`;
+    }
+    if (meta.extraInput) {
+      html += `<span class="mini-tract__extra">↓ ${meta.extraInput}</span>`;
+    }
+    html += `</div>`;
+    return html;
+  }
+
+  // === Рендер блока «Вход → Преобразование → Выход» с классификацией сигналов ===
+  function renderSignalFlowBlock(stageId) {
+    const meta = STAGE_META[stageId];
+    if (!meta) return "";
+    const inputs = meta.inputSignals.map((key) => SIGNAL_META[key]).filter(Boolean);
+    const outputs = meta.outputSignals.map((key) => SIGNAL_META[key]).filter(Boolean);
+    const inputSymbols = inputs.map((s) => s.symbol).join(", ");
+    const outputSymbols = outputs.map((s) => s.symbol).join(", ");
+    const inputTypes = inputs.map((s) => s.type).join("; ");
+    const outputTypes = outputs.map((s) => s.type).join("; ");
+    let html = `<div class="signal-flow-block">`;
+    html += `<div class="signal-flow-row">`;
+    html += `<div class="signal-flow-cell"><span>Вход</span><strong>${escapeHtml(inputSymbols)}</strong></div>`;
+    html += `<div class="signal-flow-arrow">→</div>`;
+    html += `<div class="signal-flow-cell"><span>Выход</span><strong>${escapeHtml(outputSymbols)}</strong></div>`;
+    html += `</div>`;
+    if (meta.signalChange) {
+      html += `<p class="signal-flow-change">${escapeHtml(meta.signalChange)}</p>`;
+    }
+    html += `<div class="signal-flow-types"><span><em>Вход:</em> ${escapeHtml(inputTypes)}</span><span><em>Выход:</em> ${escapeHtml(outputTypes)}</span></div>`;
+    html += `</div>`;
+    return html;
+  }
+
+  // === Рендер блока «Зависит от / Влияет на» ===
+  function renderDependenciesBlock(stageId) {
+    const meta = STAGE_META[stageId];
+    if (!meta) return "";
+    const dependsOn = meta.dependsOn || [];
+    const affects = meta.affects || [];
+    if (!dependsOn.length && !affects.length) return "";
+    const paramLabels = {
+      Pg: "P<sub>g</sub>", beta: "β", signalBandwidth: "Δf<sub>g</sub>",
+      samplingIncrease: "α", eta: "η", sigmaG: "σ<sub>g</sub>", dfg: "Δf<sub>g</sub>",
+      filterError: "ξ<sub>ф</sub>²", samplingFrequency: "f<sub>д</sub>",
+      samplingInterval: "Δt", conditionalStep: "Δu<sub>усл</sub>",
+      mu: "μ", levelCount: "L", bitDuration: "τ<sub>сим</sub>",
+      digitalBandwidth: "Δf<sub>ц</sub>", quantizationNoise: "ξ<sub>кв</sub>²",
+      modulatedBandwidth: "Δf<sub>s</sub>", noisePower: "P<sub>ш</sub>",
+      signalPower: "P<sub>c</sub>", Um: "U<sub>m</sub>",
+      errorProbability: "p<sub>ош</sub>", transmissionNoise: "ξ<sub>п</sub>²",
+      totalError: "δ<sub>Σ</sub>²", channelCapacity: "C",
+      noiseDensity: "N<sub>0</sub>", signalNoiseRatio: "h²",
+      Dg: "D<sub>g</sub>", deltaU1: "Δu<sub>1</sub>",
+    };
+    const formatParam = (p) => paramLabels[p] || escapeHtml(p);
+    let html = `<div class="dependencies-block">`;
+    if (dependsOn.length) {
+      html += `<div class="dependencies-row"><span class="dependencies-label">Зависит от:</span><span class="dependencies-values">${dependsOn.map(formatParam).join(", ")}</span></div>`;
+    }
+    if (affects.length) {
+      html += `<div class="dependencies-row"><span class="dependencies-label">Влияет на:</span><span class="dependencies-values">${affects.map(formatParam).join(", ")}</span></div>`;
+    }
+    html += `</div>`;
+    return html;
+  }
+
+  // === Рендер краткого объяснения изменения параметра ===
+  function renderChangeNote(changedParam) {
+    const note = PARAM_CHANGE_NOTES[changedParam];
+    if (!note) return "";
+    return `<div class="change-note">${escapeHtml(note)}</div>`;
+  }
+
   function renderLearningGuide(stage, params) {
     const guide = stageGuides[stage.id];
     if (!guide) return "";
@@ -276,13 +504,10 @@
     const nextStage = stages[stageIndex + 1];
     const modulationNote = ["modulator", "detector"].includes(stage.id) ? getModulationLearningNote(params) : "";
     const points = guide.points.map((point) => `<li>${escapeHtml(point)}</li>`).join("");
+    // Вход/Выход сигналов теперь в renderSignalFlowBlock; здесь — только действие и учебные точки
     return `<div class="stage-panel__content stage-panel__guide" data-group="${stage.group}">
       <p class="eyebrow">Логика этапа</p>
-      <div class="stage-flow">
-        <div><span>Вход</span><strong>${escapeHtml(guide.input)}</strong></div>
-        <div><span>Действие</span><strong>${escapeHtml(guide.action)}</strong></div>
-        <div><span>Выход</span><strong>${escapeHtml(guide.output)}</strong></div>
-      </div>
+      <p class="stage-panel__action"><strong>Действие:</strong> ${escapeHtml(guide.action)}</p>
       <ul class="learning-points">${points}</ul>
       ${modulationNote ? `<p class="stage-panel__guide-note">${escapeHtml(modulationNote)}</p>` : ""}
       ${nextStage ? `<p class="stage-panel__next">Дальше: ${escapeHtml(nextStage.title)} · ${escapeHtml(nextStage.signal)}</p>` : ""}
@@ -372,6 +597,7 @@
     const paramsSignature = getParamsSignature(params);
     if (SignalData.lastParamsString === paramsSignature && SignalData.g_hat_t) return;
 
+    SignalData.calculation = window.SystemCalculations.calculate(params);
     const stageIds = ["source", "tx-filter", "sampler", "quantizer", "encoder", "modulator", "channel", "detector", "decoder", "recipient"];
     for (const id of stageIds) {
       const handler = window.StageHandlers[id];
@@ -409,10 +635,24 @@
     let html = `<div class="stage-panel__left">`;
     html += `<div class="stage-panel__content">`;
     html += `<p class="eyebrow">Этап обработки</p><h2>${stage.title}</h2><span class="stage-panel__signal">${stage.signal}</span>`;
+    // Мини-тракт для объединённых карточек
+    const miniTractHtml = renderMiniTract(stage.id);
+    if (miniTractHtml) html += miniTractHtml;
     if (theory) html += `<p class="stage-panel__theory">${theory}</p>`;
     html += `</div>`;
+    // Блок «Вход → Выход» с классификацией сигналов
+    const signalFlowHtml = renderSignalFlowBlock(stage.id);
+    if (signalFlowHtml) html += `<div class="stage-panel__content">${signalFlowHtml}</div>`;
     html += renderLearningGuide(stage, params);
     html += renderStageControls(stage.id, params);
+    // Блок зависимостей
+    const depsHtml = renderDependenciesBlock(stage.id);
+    if (depsHtml) html += `<div class="stage-panel__content">${depsHtml}</div>`;
+    // Объяснение последнего изменения параметра (если есть)
+    if (lastChangedParam) {
+      const changeNoteHtml = renderChangeNote(lastChangedParam);
+      if (changeNoteHtml) html += `<div class="stage-panel__content">${changeNoteHtml}</div>`;
+    }
     if (formulas) {
       html += `<div class="stage-panel__content stage-panel__content--formulas">${formulas}</div>`;
     } else {
@@ -583,6 +823,10 @@
     if (!isApplyingVariant) variantPreset.value = "custom";
     if (event.target.name === "modulation") updateConditionalFields();
     if (["beta", "bandwidthFactor"].includes(event.target.name)) updateDerivedFields();
+    // Запоминаем изменённый параметр для подсветки зависимостей
+    if (!isApplyingVariant && event.target.name) {
+      lastChangedParam = event.target.name;
+    }
     renderParametersSummary();
     // Перерендериваем текущий этап с новыми параметрами
     const currentStage = getStage(currentStageId);
@@ -595,6 +839,7 @@
     if (!isApplyingVariant) variantPreset.value = "custom";
     if (name === "modulation") updateConditionalFields();
     if (["beta", "bandwidthFactor"].includes(name)) updateDerivedFields();
+    if (!isApplyingVariant) lastChangedParam = name;
     renderParametersSummary();
     renderPanel(getStage(currentStageId));
   }

@@ -4,17 +4,8 @@
   window.StageHandlers = window.StageHandlers || {};
 
   function getQuantizerParams(params) {
-    const sigmaG = Math.sqrt(parseFloat(params.signalPower) || 1.5);
-    const thresholdCount = 15;
-    const levelCount = 16;
-    const mu = 4;
-    const Dg = 6 * sigmaG;
-    const dU = Dg / (thresholdCount - 1);
-    const thresholds = [];
-    for (let i = 0; i < thresholdCount; i++) thresholds.push(-3 * sigmaG + i * dU);
-    const levels = [];
-    for (let j = 0; j < levelCount; j++) levels.push(-3 * sigmaG + (j - 0.5) * dU);
-    return { sigmaG, thresholdCount, levelCount, mu, Dg, dU, thresholds, levels };
+    const calculation = window.SignalData?.calculation || window.SystemCalculations.calculate(params);
+    return { ...calculation.source, ...calculation.quantizer };
   }
 
   function quantizeValue(value, thresholds, levels) {
@@ -25,9 +16,14 @@
 
   window.StageHandlers.quantizer = {
     process: function(params, SignalData) {
-      const { dU, thresholds, levels } = getQuantizerParams(params);
+      const { dU, thresholds, levels, mu, thresholdCount, levelCount, deltaU1, conditionalStep } = getQuantizerParams(params);
       SignalData.levels = levels;
       SignalData.thresholds = thresholds;
+      SignalData.quantization_mu = mu;
+      SignalData.quantization_threshold_count = thresholdCount;
+      SignalData.quantization_level_count = levelCount;
+      SignalData.quantization_delta_u1 = deltaU1;
+      SignalData.quantization_conditional_step = conditionalStep;
       SignalData.quantized_indices = [];
       SignalData.quantized_v = SignalData.sampled_x_values.map((val) => {
         const quantized = quantizeValue(val, thresholds, levels);
@@ -163,16 +159,17 @@
     },
 
     renderTheory: function(stage, params, toLatexNumber, SignalData) {
-      const { sigmaG, thresholdCount, levelCount, mu, Dg, dU } = getQuantizerParams(params);
+      const { sigmaG, thresholdCount, levelCount, mu, Dg, dU, deltaU1, conditionalStep } = getQuantizerParams(params);
       const eta = SignalData.quantization_eta || window.VisualMath.getEta(params);
       const eps = SignalData.quantization_error_analytic_sq || Math.pow(dU, 2) / 12;
       const Py = SignalData.quantized_power_analytic || 0;
       const meta = window.VisualMath.getCorrelationMeta(params);
       let theory = "Квантователь заменяет каждый амплитудный отсчёт ближайшим разрешённым уровнем. Красные отрезки показывают шум квантования, а гистограмма показывает, какие уровни выбираются чаще.";
       let formulas = `<div class="formula-preview"><span>Динамический диапазон</span>\\[ D_g = u_L-u_1=6\\sigma_g = 6 \\cdot ${toLatexNumber(sigmaG.toFixed(3))} = ${toLatexNumber(Dg.toFixed(3))} \\text{ В} \\]</div>`;
-      formulas += `<div class="formula-preview"><span>Разрядность, пороги и выходные уровни</span>\\[ L=2^\\mu-1=${thresholdCount},\\quad L+1=${levelCount},\\quad \\mu=${mu} \\]\\[ \\Delta U = \\frac{6\\sigma_g}{L-1}=\\frac{${toLatexNumber(Dg.toFixed(3))}}{${thresholdCount - 1}}=${toLatexNumber(dU.toFixed(3))}\\text{ В} \\]\\[ u_i=-3\\sigma_g+(i-1)\\Delta U,\\quad v_j=-3\\sigma_g+(j-1{,}5)\\Delta U \\]</div>`;
       formulas += `<div class="formula-preview"><span>Поправочный коэффициент по виду корреляции</span>\\[ ${meta.etaLatex}, \\quad \\alpha=${toLatexNumber((parseFloat(params.samplingIncrease) || 2).toFixed(2))}, \\quad \\eta\\approx ${toLatexNumber(eta.toFixed(3))} \\]</div>`;
-      formulas += `<div class="formula-preview"><span>Вероятности уровней и интегральное распределение</span>\\[ p_j = \\Phi\\left(\\frac{u_j}{\\sigma_g}\\right)-\\Phi\\left(\\frac{u_{j-1}}{\\sigma_g}\\right),\\quad F_j=\\sum_{i=1}^{j}p_i \\]\\[ P_y=\\sum_{j=1}^{16}v_j^2p_j\\approx ${toLatexNumber(Py.toFixed(4))} \\text{ В}^2 \\]</div>`;
+      formulas += `<div class="formula-preview"><span>Допустимый условный шаг</span>\\[ \\Delta u_1=\\sqrt{\\frac{P_g}{2}}=${toLatexNumber(deltaU1.toFixed(3))}\\text{ В},\\quad \\Delta u_{усл}=\\frac{\\Delta u_1}{\\eta}=\\frac{${toLatexNumber(deltaU1.toFixed(3))}}{${toLatexNumber(eta.toFixed(3))}}=${toLatexNumber(conditionalStep.toFixed(3))}\\text{ В} \\]</div>`;
+      formulas += `<div class="formula-preview"><span>Разрядность, пороги и выходные уровни</span>\\[ \\mu=\\left\\lceil\\log_2\\left(\\frac{6\\sigma_g}{\\Delta u_{усл}}+2\\right)\\right\\rceil=${mu} \\]\\[ L=2^\\mu-1=${thresholdCount},\\quad L+1=${levelCount} \\]\\[ \\Delta U = \\frac{6\\sigma_g}{L-1}=\\frac{${toLatexNumber(Dg.toFixed(3))}}{${thresholdCount - 1}}=${toLatexNumber(dU.toFixed(3))}\\text{ В} \\]\\[ u_i=-3\\sigma_g+(i-1)\\Delta U,\\quad v_j=-3\\sigma_g+(j-1{,}5)\\Delta U \\]</div>`;
+      formulas += `<div class="formula-preview"><span>Вероятности уровней и интегральное распределение</span>\\[ p_j = \\Phi\\left(\\frac{u_j}{\\sigma_g}\\right)-\\Phi\\left(\\frac{u_{j-1}}{\\sigma_g}\\right),\\quad F_j=\\sum_{i=1}^{j}p_i \\]\\[ P_y=\\sum_{j=1}^{${levelCount}}v_j^2p_j\\approx ${toLatexNumber(Py.toFixed(4))} \\text{ В}^2 \\]</div>`;
       formulas += `<div class="formula-preview"><span>Аналитическая мощность шума квантования</span>\\[ \\varepsilon_{кв}^2 \\approx \\frac{\\Delta U^2}{12} = \\frac{${toLatexNumber(dU.toFixed(3))}^2}{12} \\approx ${toLatexNumber(eps.toFixed(4))} \\text{ В}^2 \\]</div>`;
       formulas += `<div class="stage-panel__info-box"><strong>Связь с графиком:</strong><br>Серые пунктирные линии — пороги \\(u_i\\), зеленые горизонтали — выходные уровни \\(v_j\\). Столбцы \\(p_j\\) и линия \\(F_j\\) пересчитываются из гауссовского закона при каждом изменении \\(P_g\\).</div>`;
       return { theory, formulas };

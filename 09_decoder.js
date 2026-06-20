@@ -4,28 +4,24 @@
   window.StageHandlers = window.StageHandlers || {};
 
   function getQuantizerParams(params) {
-    const sigmaG = Math.sqrt(parseFloat(params.signalPower) || 1.5);
-    const thresholdCount = 15;
-    const Dg = 6 * sigmaG;
-    const dU = Dg / (thresholdCount - 1);
-    const levels = [];
-    for (let j = 0; j < 16; j++) levels.push(-3 * sigmaG + (j - 0.5) * dU);
-    return { sigmaG, Dg, dU, levels };
+    const calculation = window.SignalData?.calculation || window.SystemCalculations.calculate(params);
+    return { ...calculation.source, ...calculation.quantizer, codebook: calculation.coding.codebook };
   }
 
-  function indexFromCode(word) {
+  function indexFromCode(word, levelCount) {
     const value = parseInt(word, 2);
-    return value === 0 ? 15 : Math.max(0, Math.min(15, value - 1));
+    return value === 0 ? levelCount - 1 : Math.max(0, Math.min(levelCount - 1, value - 1));
   }
 
-  function getTransitionDistanceFactor(probabilities) {
-    const L = 16;
+  function getTransitionDistanceFactor(probabilities, codebook, levelCount, mu) {
     let sum = 0;
-    for (let i = 0; i < L; i++) {
-      const pi = probabilities?.[i] ?? (1 / L);
-      for (let bit = 0; bit < 4; bit++) {
-        const j = i ^ (1 << bit);
-        sum += pi * 0.25 * Math.pow(j - i, 2);
+    for (let i = 0; i < levelCount; i++) {
+      const pi = probabilities?.[i] ?? (1 / levelCount);
+      for (let bit = 0; bit < mu; bit++) {
+        const flipped = [...codebook[i]];
+        flipped[bit] = flipped[bit] === "1" ? "0" : "1";
+        const j = indexFromCode(flipped.join(""), levelCount);
+        sum += pi * (1 / mu) * Math.pow(j - i, 2);
       }
     }
     return sum;
@@ -34,7 +30,7 @@
   window.StageHandlers.decoder = {
     process: function(params, SignalData) {
       const N = SignalData.N;
-      const { dU, levels } = getQuantizerParams(params);
+      const { dU, levels, levelCount, mu, codebook } = getQuantizerParams(params);
       const stepSize = window.VisualMath.getSampleStep(params);
 
       SignalData.v_hat = [];
@@ -43,20 +39,20 @@
       SignalData.original_code_words = [];
       SignalData.error_code_words = [];
       SignalData.decoded_indices = [];
-      for (let i = 0; i < SignalData.b_hat.length; i += 4) {
-        let chunk = SignalData.b_hat.slice(i, i + 4);
-        let binStr = chunk.map(b => b > 0 ? "1" : "0").join("").padEnd(4, "0");
-        let dec = indexFromCode(binStr);
+      for (let i = 0; i < SignalData.b_hat.length; i += mu) {
+        let chunk = SignalData.b_hat.slice(i, i + mu);
+        let binStr = chunk.map(b => b > 0 ? "1" : "0").join("").padEnd(mu, "0");
+        let dec = indexFromCode(binStr, levelCount);
         let recoveredLevel = levels[dec];
         SignalData.received_code_words.push(binStr);
         SignalData.decoded_indices.push(dec);
         SignalData.v_hat.push(recoveredLevel);
-        let origChunk = SignalData.b_t.slice(i, i + 4).map(b => b > 0 ? "1" : "0").join("").padEnd(4, "0");
+        let origChunk = SignalData.b_t.slice(i, i + mu).map(b => b > 0 ? "1" : "0").join("").padEnd(mu, "0");
         SignalData.original_code_words.push(origChunk);
         const errorWord = [...binStr].map((bit, bitIndex) => bit === (origChunk[bitIndex] || "0") ? "0" : "1").join("");
         SignalData.error_code_words.push(errorWord);
         if (binStr !== origChunk) {
-          SignalData.chunkErrors.push({ orig: origChunk, err: binStr, errorWord, expected: levels[indexFromCode(origChunk)], decoded: recoveredLevel });
+          SignalData.chunkErrors.push({ orig: origChunk, err: binStr, errorWord, expected: levels[indexFromCode(origChunk, levelCount)], decoded: recoveredLevel });
         }
       }
       const transmissionErr = SignalData.v_hat.reduce((acc, value, index) => {
@@ -64,8 +60,24 @@
         return acc + Math.pow(value - expected, 2);
       }, 0);
       SignalData.transmission_noise_sq = SignalData.v_hat.length ? transmissionErr / SignalData.v_hat.length : 0;
-      SignalData.transition_distance_factor = getTransitionDistanceFactor(SignalData.level_probabilities);
-      SignalData.transmission_noise_analytic_sq = 0.1777 * Math.pow(dU, 2) * (SignalData.p_err_val || 0) * SignalData.transition_distance_factor;
+      // Шум передачи по методичке (формулы 39-42):
+      // ξп² = ((2/π)·Si(π) - 1) · ΔU² · p̄ош · Σᵢ pᵢ Σⱼ (j-i)²
+      // где Σⱼ — по всем уровням, не только однократные битовые ошибки.
+      SignalData.transition_distance_factor = getTransitionDistanceFactor(SignalData.level_probabilities, codebook, levelCount, mu);
+      const tnResult = (window.Calculations && window.Calculations.computeTransmissionNoise)
+        ? window.Calculations.computeTransmissionNoise({
+            stepSize: dU,
+            levelCount,
+            probabilities: SignalData.level_probabilities,
+            pError: SignalData.p_err_val || 0,
+          })
+        : null;
+      if (tnResult) {
+        SignalData.transmission_noise_analytic_sq = tnResult.value;
+        SignalData.transmission_noise_meta = tnResult;
+      } else {
+        SignalData.transmission_noise_analytic_sq = 0.1777 * Math.pow(dU, 2) * (SignalData.p_err_val || 0) * SignalData.transition_distance_factor;
+      }
 
       SignalData.x_hat_t = new Array(N).fill(0);
       for (let i = 0; i < N; i++) {
@@ -76,14 +88,15 @@
     },
     renderSVG: function(id, params, helpers, SignalData) {
       const { W, H, getX, getLocalY, yZero, drawStemsSVG } = helpers;
+      const { mu } = (SignalData.calculation || window.SystemCalculations.calculate(params)).coding;
       const stepSize = window.VisualMath.getSampleStep(params);
       const zoom = window.VisualMath.getZoomWindow(SignalData, 5);
-      const wordStart = Math.floor(zoom.start / 4);
-      const wordEnd = Math.min(SignalData.received_code_words.length, Math.ceil(zoom.end / 4) + 2);
+      const wordStart = Math.floor(zoom.start / mu);
+      const wordEnd = Math.min(SignalData.received_code_words.length, Math.ceil(zoom.end / mu) + 2);
       const codeRows = SignalData.received_code_words.slice(wordStart, wordEnd).map((word, offset) => {
         const index = wordStart + offset;
-        const original = SignalData.original_code_words[index] || "0000";
-        const error = SignalData.error_code_words[index] || "0000";
+        const original = SignalData.original_code_words[index] || "0".repeat(mu);
+        const error = SignalData.error_code_words[index] || "0".repeat(mu);
         const decodedLevel = SignalData.v_hat[index] ?? 0;
         const expectedLevel = SignalData.quantized_v[index] ?? decodedLevel;
         const changed = word !== original;
@@ -141,12 +154,15 @@
       </div>`;
     },
     renderTheory: function(stage, params, toLatexNumber, SignalData) {
-      const { dU } = getQuantizerParams(params);
+      const { dU, levelCount, thresholdCount, mu, codebook } = getQuantizerParams(params);
       const pErr = SignalData.p_err_val || 0;
-      const transitionFactor = SignalData.transition_distance_factor || getTransitionDistanceFactor(SignalData.level_probabilities);
-      const xiAnalytic = SignalData.transmission_noise_analytic_sq || (0.1777 * dU * dU * pErr * transitionFactor);
+      const transitionFactor = SignalData.transition_distance_factor || getTransitionDistanceFactor(SignalData.level_probabilities, codebook, levelCount, mu);
+      const tnMeta = SignalData.transmission_noise_meta;
+      const xiAnalytic = SignalData.transmission_noise_analytic_sq || 0;
+      const tnCoeff = tnMeta?.coefficient || 0.1777;
+      const tnSumTransitions = tnMeta?.sumTransitions || transitionFactor;
       let theory = "Пачки из μ битов снова группируются и переводятся в десятичный номер уровня. Если хотя бы один бит был искажён, декодер восстановит неправильный уровень.";
-      let formulas = `<div class="formula-preview"><span>Битовый канал и обратное кодирование</span>\\[ \\hat{b}_i=b_i\\oplus_2E_i,\\quad 0001\\to v_1,\\ldots,1111\\to v_{15},\\quad 0000\\to v_{16} \\]</div>`;
+      let formulas = `<div class="formula-preview"><span>Битовый канал и обратное кодирование</span>\\[ \\hat{b}_i=b_i\\oplus_2E_i,\\quad ${codebook[0]}\\to v_1,\\ldots,${codebook[thresholdCount - 1]}\\to v_{${thresholdCount}},\\quad ${codebook[levelCount - 1]}\\to v_{${levelCount}} \\]</div>`;
       formulas += `<div class="formula-preview"><span>Формула обратного пересчета уровня</span>\\[ \\hat{v}_j = -3\\sigma_g + (j-1{,}5)\\Delta U \\]</div>`;
       const chunkErrors = SignalData.chunkErrors || [];
       if (chunkErrors.length > 0) {
@@ -155,8 +171,10 @@
       } else {
         formulas += `<div class="stage-panel__info-box stage-panel__info-box--ok">Ошибок в битах не обнаружено.</div>`;
       }
-      formulas += `<div class="formula-preview"><span>Аналитический шум передачи</span>\\[ \\xi_p^2 \\approx 0{,}1777\\Delta U^2p_{ош}\\sum p_{ij}(j-i)^2 = 0{,}1777\\cdot ${toLatexNumber(dU.toFixed(3))}^2\\cdot ${pErr.toExponential(3).replace(".", "{,}")}\\cdot ${toLatexNumber(transitionFactor.toFixed(3))} \\approx ${toLatexNumber(xiAnalytic.toFixed(6))} \\text{ В}^2 \\]</div>`;
-      formulas += `<div class="stage-panel__info-box"><strong>Связь с графиком:</strong><br>Бледная ступенька показывает исходные уровни из квантователя, зелёный контур — восстановленные уровни. Красная заливка показывает конкретные отклонения на этом прогоне, а численная \\(\\xi_p^2\\) выше считается по вероятности ошибки и матрице переходов 4-битного кода.</div>`;
+      const tnCoeffText = tnCoeff.toFixed(4).replace(".", "{,}");
+      formulas += `<div class="formula-preview"><span>Аналитический шум передачи (по методичке, формулы 39-42)</span>\\[ \\xi_p^2=\\left(\\frac{2}{\\pi}\\text{Si}(\\pi)-1\\right)\\Delta U^2\\overline{p}_{ош}\\sum_{i=1}^{L+1}p_i\\sum_{j=1}^{L+1}(j-i)^2 \\]</div>`;
+      formulas += `<div class="formula-preview"><span>Подстановка чисел варианта</span>\\[ \\xi_p^2=${tnCoeffText}\\cdot ${toLatexNumber(dU.toFixed(3))}^2\\cdot ${pErr.toExponential(3).replace(".", "{,}")}\\cdot ${toLatexNumber(tnSumTransitions.toFixed(3))}\\approx ${toLatexNumber(xiAnalytic.toFixed(6))}\\text{ В}^2 \\]</div>`;
+      formulas += `<div class="stage-panel__info-box"><strong>Связь с графиком:</strong><br>Бледная ступенька показывает исходные уровни из квантователя, зелёный контур — восстановленные уровни. Красная заливка показывает конкретные отклонения на этом прогоне. Коэффициент \\((2/\\pi)\\text{Si}(\\pi)-1\\approx${tnCoeffText}\\) учитывает фильтрацию шума идеальным ФНЧ на выходе ЦАП; сумма \\(\\sum p_i\\sum(j-i)^2\\) берётся по всем уровням, как в методичке.</div>`;
       return { theory, formulas };
     }
   };

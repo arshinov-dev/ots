@@ -4,26 +4,18 @@
   window.StageHandlers = window.StageHandlers || {};
 
   function buildQuantizerParams(params) {
-    const sigmaG = Math.sqrt(parseFloat(params.signalPower) || 1.5);
-    const thresholdCount = 15;
-    const levelCount = 16;
-    const Dg = 6 * sigmaG;
-    const dU = Dg / (thresholdCount - 1);
-    const thresholds = [];
-    for (let i = 0; i < thresholdCount; i++) thresholds.push(-3 * sigmaG + i * dU);
-    const levels = [];
-    for (let j = 0; j < levelCount; j++) levels.push(-3 * sigmaG + (j - 0.5) * dU);
-    return { sigmaG, thresholdCount, levelCount, dU, thresholds, levels };
+    const calculation = window.SignalData?.calculation || window.SystemCalculations.calculate(params);
+    return { ...calculation.source, ...calculation.quantizer };
   }
 
-  function codeForLevelIndex(index) {
+  function codeForLevelIndex(index, levelCount, mu) {
     const decimal = index + 1;
-    return decimal === 16 ? "0000" : decimal.toString(2).padStart(4, "0");
+    return decimal === levelCount ? "0".repeat(mu) : decimal.toString(2).padStart(mu, "0");
   }
 
-  function indexFromCode(word) {
+  function indexFromCode(word, levelCount) {
     const value = parseInt(word, 2);
-    return value === 0 ? 15 : Math.max(0, Math.min(15, value - 1));
+    return value === 0 ? levelCount - 1 : Math.max(0, Math.min(levelCount - 1, value - 1));
   }
 
   function hammingDistance(left, right) {
@@ -34,9 +26,9 @@
     return distance;
   }
 
-  function buildCodebook() {
+  function buildCodebook(levelCount, mu) {
     const words = [];
-    for (let i = 0; i < 16; i++) words.push(codeForLevelIndex(i));
+    for (let i = 0; i < levelCount; i++) words.push(codeForLevelIndex(i, levelCount, mu));
     return words;
   }
 
@@ -44,15 +36,15 @@
     return words.map((left) => words.map((right) => hammingDistance(left, right)));
   }
 
-  function quantizeIndex(value, thresholds) {
+  function quantizeIndex(value, thresholds, levelCount) {
     const index = thresholds.findIndex((threshold) => value <= threshold);
-    return index === -1 ? 15 : index;
+    return index === -1 ? levelCount - 1 : index;
   }
 
   window.StageHandlers.encoder = {
     process: function(params, SignalData) {
-      const { thresholds, levels } = buildQuantizerParams(params);
-      const codebook = buildCodebook();
+      const { thresholds, levels, levelCount, mu } = buildQuantizerParams(params);
+      const codebook = buildCodebook(levelCount, mu);
       SignalData.digital_b = [];
       SignalData.b_t = [];
       SignalData.code_words = [];
@@ -63,7 +55,7 @@
       SignalData.quantized_v.forEach((val) => {
         const closestIdx = Number.isInteger(SignalData.quantized_indices?.[SignalData.code_words.length])
           ? SignalData.quantized_indices[SignalData.code_words.length]
-          : quantizeIndex(val, thresholds);
+          : quantizeIndex(val, thresholds, levelCount);
         const binStr = codebook[closestIdx];
         SignalData.code_level_indices.push(closestIdx);
         SignalData.code_decimal_numbers.push(closestIdx + 1);
@@ -73,7 +65,7 @@
           SignalData.b_t.push(bit === '1' ? 1 : -1);
         }
       });
-      const probabilities = SignalData.level_probabilities || new Array(16).fill(1 / 16);
+      const probabilities = SignalData.level_probabilities || new Array(levelCount).fill(1 / levelCount);
       let ones = 0;
       let zeros = 0;
       codebook.forEach((word, index) => {
@@ -82,18 +74,20 @@
         zeros += [...word].filter((bit) => bit === "0").length * p;
       });
       SignalData.bit_probabilities = {
-        one: ones / 4,
-        zero: zeros / 4,
+        one: ones / mu,
+        zero: zeros / mu,
       };
-      SignalData.indexFromCode = indexFromCode;
+      SignalData.indexFromCode = (word) => indexFromCode(word, levelCount);
+      SignalData.code_mu = mu;
     },
 
     renderSVG: function(id, params, helpers, SignalData) {
       const { W } = helpers;
+      const calculation = SignalData.calculation || window.SystemCalculations.calculate(params);
+      const { mu, tauSim } = calculation.coding;
+      const { levelCount } = calculation.quantizer;
       const numBits = SignalData.b_t ? SignalData.b_t.length : 0;
-      const fd = 2 * (parseFloat(params.samplingIncrease) || 2) * (parseFloat(params.signalBandwidth) || 28);
-      const dt = 1 / fd;
-      const tauSim = dt / 4;
+      const dt = calculation.sampling.dt;
 
       const codeItems = SignalData.code_words.slice(0, 10).map((word, index) => {
         const level = SignalData.quantized_v[index] ?? 0;
@@ -106,7 +100,7 @@
       }).join("");
       const codeStrip = `<div class="code-strip">${codeItems}</div>`;
 
-      const codeRows = (SignalData.codebook || buildCodebook()).map((word, index) => {
+      const codeRows = (SignalData.codebook || buildCodebook(levelCount, mu)).map((word, index) => {
         const level = SignalData.levels?.[index] ?? buildQuantizerParams(params).levels[index];
         const p = SignalData.level_probabilities?.[index] ?? 0;
         return `<tr><td>${index + 1}</td><td>v${index + 1}</td><td>${level.toFixed(3)}</td><td>${word}</td><td>${p.toFixed(4)}</td></tr>`;
@@ -116,7 +110,7 @@
       const matrixRows = (SignalData.code_distance_matrix || []).map((row, i) => {
         return `<tr><th>${i + 1}</th>${row.map((value, j) => `<td class="${i === j ? "is-diagonal" : ""}">${value}</td>`).join("")}</tr>`;
       }).join("");
-      const matrixHead = `<tr><th>d</th>${Array.from({ length: 16 }, (_, i) => `<th>${i + 1}</th>`).join("")}</tr>`;
+      const matrixHead = `<tr><th>d</th>${Array.from({ length: levelCount }, (_, i) => `<th>${i + 1}</th>`).join("")}</tr>`;
       const distanceTable = `<div class="distance-table-wrap"><table class="distance-table"><thead>${matrixHead}</thead><tbody>${matrixRows}</tbody></table></div>`;
 
       const botH = 150;
@@ -136,12 +130,12 @@
       }
       botSvg += `<path d="${meanderD}" stroke="#0c6b4f" stroke-width="2.8" fill="none" stroke-linejoin="miter" />`;
 
-      if (numBits >= 4) {
-        const sampleWidth = bitStepX * 4;
+      if (numBits >= mu) {
+        const sampleWidth = bitStepX * mu;
         botSvg += `<line x1="0" y1="${botH - 28}" x2="${sampleWidth}" y2="${botH - 28}" stroke="#e74c3c" stroke-width="2" />
           <path d="M 7 ${botH - 33} L 0 ${botH - 28} L 7 ${botH - 23}" fill="none" stroke="#e74c3c" stroke-width="2" />
           <path d="M ${sampleWidth - 7} ${botH - 33} L ${sampleWidth} ${botH - 28} L ${sampleWidth - 7} ${botH - 23}" fill="none" stroke="#e74c3c" stroke-width="2" />`;
-        for (let i = 1; i < 4; i++) {
+        for (let i = 1; i < mu; i++) {
           const x = i * bitStepX;
           botSvg += `<line x1="${x}" y1="10" x2="${x}" y2="${botH - 16}" stroke="rgba(98,113,107,0.28)" stroke-dasharray="4,7" />`;
         }
@@ -172,11 +166,11 @@
       zoomSvg += `</svg>`;
 
       const specH = 260;
-      const xUnitMax = 10;
+      const xUnitMax = Math.max(10, 2 * mu + 2);
       const xSpec = (unit) => (unit / xUnitMax) * W;
       const ySpec = (value) => specH - 24 - value * (specH - 54);
       const sinc = (unit) => {
-        const x = Math.PI * unit / 4;
+        const x = Math.PI * unit / mu;
         return Math.abs(x) < 1e-6 ? 1 : Math.abs(Math.sin(x) / x);
       };
       const envelope = window.VisualMath.makeSamples(0, xUnitMax, 360, (unit) => sinc(unit));
@@ -189,12 +183,12 @@
         specSvg += `<line x1="${x}" y1="${specH - 24}" x2="${x}" y2="${ySpec(amp)}" stroke="#1f2b26" stroke-width="${unit % 4 === 0 ? 2.6 : 1.8}" />
           <circle cx="${x}" cy="${ySpec(amp)}" r="2.6" fill="#1f2b26" />`;
       }
-      [1, 2, 3, 4, 8].forEach((unit) => {
-        const label = unit === 4 ? "1/τсим" : unit === 8 ? "2/τсим" : `${unit}/Δt`;
+      [...new Set([1, 2, 3, mu, 2 * mu])].filter((unit) => unit <= xUnitMax).forEach((unit) => {
+        const label = unit === mu ? "1/τсим" : unit === 2 * mu ? "2/τсим" : `${unit}/Δt`;
         specSvg += `<line x1="${xSpec(unit)}" y1="${specH - 24}" x2="${xSpec(unit)}" y2="${specH - 12}" stroke="#1f2b26" stroke-width="1.3" />
           <text x="${xSpec(unit)}" y="${specH - 4}" fill="#31433b" font-family="monospace" font-size="12" text-anchor="middle">${label}</text>`;
       });
-      specSvg += `<line x1="${xSpec(4)}" y1="20" x2="${xSpec(4)}" y2="${specH - 24}" stroke="#e74c3c" stroke-width="1.8" stroke-dasharray="6,6" />`;
+      specSvg += `<line x1="${xSpec(mu)}" y1="20" x2="${xSpec(mu)}" y2="${specH - 24}" stroke="#e74c3c" stroke-width="1.8" stroke-dasharray="6,6" />`;
       specSvg += `</svg>`;
       const p0 = SignalData.bit_probabilities?.zero ?? 0.5;
       const p1 = SignalData.bit_probabilities?.one ?? 0.5;
@@ -210,43 +204,40 @@
         <text x="${W * 0.56 + barW / 2}" y="${probH - 8}" fill="#62716b" font-family="monospace" font-size="14" text-anchor="middle">1</text>
         <line x1="${W * 0.16}" y1="${probH - 24 - 0.5 * (probH - 46)}" x2="${W * 0.86}" y2="${probH - 24 - 0.5 * (probH - 46)}" stroke="#e74c3c" stroke-width="1.6" stroke-dasharray="6,6" />`;
       probSvg += `</svg>`;
-      const timingScale = `<dl class="visual-scale"><div><dt>Отсчёт</dt><dd>Δt=${dt.toFixed(4)} мс</dd></div><div><dt>Символ</dt><dd>τсим=${tauSim.toFixed(4)} мс</dd></div><div><dt>Код</dt><dd>4 бита на один уровень</dd></div></dl>`;
+      const timingScale = `<dl class="visual-scale"><div><dt>Отсчёт</dt><dd>Δt=${dt.toFixed(4)} мс</dd></div><div><dt>Символ</dt><dd>τсим=${tauSim.toFixed(4)} мс</dd></div><div><dt>Код</dt><dd>${mu} бит на один уровень</dd></div></dl>`;
       const zoomScale = `<dl class="visual-scale"><div><dt>Окно</dt><dd>биты ${zoom.start + 1}-${zoom.end}</dd></div><div><dt>Назначение</dt><dd>это же окно используется в блоках 06-08</dd></div></dl>`;
       const spectrumScale = `<dl class="visual-scale"><div><dt>Огибающая</dt><dd>sin x / x</dd></div><div><dt>Первый ноль</dt><dd>1/τсим=${(1 / tauSim).toFixed(2)} кГц</dd></div><div><dt>Расчетная полоса</dt><dd>Δfц=${(2 / tauSim).toFixed(2)} кГц</dd></div></dl>`;
       const probScale = `<dl class="visual-scale"><div><dt>p(0)</dt><dd>${p0.toFixed(4)}</dd></div><div><dt>p(1)</dt><dd>${p1.toFixed(4)}</dd></div><div><dt>Ожидание</dt><dd>для симметричного гауссовского входа близко к 0.5</dd></div></dl>`;
 
       return `<div class="stage-panel__visuals-stack">
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Маппинг квантованных уровней в 4-битные коды</p>${codeStrip}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Маппинг квантованных уровней в ${mu}-битные коды</p>${codeStrip}</div>
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Полная таблица безызбыточного блочного кода</p>${codeTable}</div>
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Матрица кодовых расстояний d_lm</p>${distanceTable}</div>
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Априорные вероятности битов p(0) и p(1)</p>${probScale}${probSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Цифровой меандр b(t): четыре τсим на один Δt</p>${timingScale}${botSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Цифровой меандр b(t): ${mu} символов τсим на один Δt</p>${timingScale}${botSvg}</div>
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Синхронная лупа: этот же фрагмент используют блоки 06–08</p>${zoomScale}${zoomSvg}</div>
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Амплитудный спектр прямоугольного цифрового сигнала</p>${spectrumScale}${specSvg}</div>
       </div>`;
     },
 
     renderTheory: function(stage, params, toLatexNumber, SignalData) {
-      const alpha = parseFloat(params.samplingIncrease) || 2;
-      const dfg = parseFloat(params.signalBandwidth) || 28;
-      const fd = 2 * alpha * dfg;
-      const dt = 1 / fd;
-      const tauSim = dt / 4;
-      const k1 = 2;
-      const digitalBandwidth = k1 / tauSim;
+      const calculation = SignalData.calculation || window.SystemCalculations.calculate(params);
+      const { dt } = calculation.sampling;
+      const { mu, tauSim, k1, dfPcm: digitalBandwidth } = calculation.coding;
+      const { thresholdCount, levelCount } = calculation.quantizer;
       const probabilities = SignalData.level_probabilities || [];
       const entropy = probabilities.reduce((acc, p) => p > 0 ? acc - p * Math.log2(p) : acc, 0);
       const productivity = entropy / dt;
-      const redundancy = Math.max(0, 1 - entropy / 4);
+      const redundancy = Math.max(0, 1 - entropy / mu);
       const p0 = SignalData.bit_probabilities?.zero ?? 0.5;
       const p1 = SignalData.bit_probabilities?.one ?? 0.5;
-      let theory = "Кодер превращает номер уровня в безызбыточную 4-битную комбинацию. Один отсчёт Δt распадается на четыре прямоугольных символа, поэтому цифровой сигнал имеет широкий лепестковый спектр.";
-      let formulas = `<div class="formula-preview"><span>Разрядность кодера</span>\\[ L = 16 \\implies \\mu = \\log_2(L) = 4 \\text{ бит} \\]</div>`;
-      formulas += `<div class="formula-preview"><span>Длительность символа</span>\\[ \\tau_{сим} = \\frac{\\Delta t}{\\mu} = \\frac{${toLatexNumber(dt.toFixed(4))}}{4} \\approx ${toLatexNumber(tauSim.toFixed(4))} \\text{ мс} \\]</div>`;
+      let theory = `Кодер превращает номер уровня в безызбыточную ${mu}-битную комбинацию. Один отсчёт Δt распадается на ${mu} прямоугольных символов, поэтому изменение разрядности меняет битовую скорость и спектр.`;
+      let formulas = `<div class="formula-preview"><span>Разрядность кодера</span>\\[ L+1=${levelCount}=2^{${mu}} \\implies \\mu=\\log_2(L+1)=${mu}\\text{ бит},\\quad L=${thresholdCount} \\]</div>`;
+      formulas += `<div class="formula-preview"><span>Длительность символа</span>\\[ \\tau_{сим} = \\frac{\\Delta t}{\\mu} = \\frac{${toLatexNumber(dt.toFixed(4))}}{${mu}} \\approx ${toLatexNumber(tauSim.toFixed(4))} \\text{ мс} \\]</div>`;
       formulas += `<div class="formula-preview"><span>Оценка ширины спектра цифрового сигнала</span>\\[ \\Delta f_ц = \\frac{k_1}{\\tau_{сим}},\\quad k_1=${k1},\\quad \\Delta f_ц \\approx ${toLatexNumber(digitalBandwidth.toFixed(2))} \\text{ кГц} \\]</div>`;
-      formulas += `<div class="formula-preview"><span>Энтропия квантованных сообщений</span>\\[ H_y=-\\sum_{j=0}^{15}p_j\\log_2p_j\\approx ${toLatexNumber(entropy.toFixed(3))}\\text{ бит/отсчёт} \\]</div>`;
+      formulas += `<div class="formula-preview"><span>Энтропия квантованных сообщений</span>\\[ H_y=-\\sum_{j=1}^{${levelCount}}p_j\\log_2p_j\\approx ${toLatexNumber(entropy.toFixed(3))}\\text{ бит/отсчёт} \\]</div>`;
       formulas += `<div class="formula-preview"><span>Кодовые расстояния</span>\\[ d_{lm}=\\sum_{r=1}^{\\mu} b_l^r\\oplus_2 b_m^r \\]</div>`;
-      formulas += `<div class="formula-preview"><span>Априорные вероятности битов</span>\\[ p(0)=\\frac{1}{\\mu}\\sum_{j=1}^{16}n_j(0)p_j\\approx ${toLatexNumber(p0.toFixed(4))},\\quad p(1)=\\frac{1}{\\mu}\\sum_{j=1}^{16}n_j(1)p_j\\approx ${toLatexNumber(p1.toFixed(4))} \\]</div>`;
+      formulas += `<div class="formula-preview"><span>Априорные вероятности битов</span>\\[ p(0)=\\frac{1}{\\mu}\\sum_{j=1}^{${levelCount}}n_j(0)p_j\\approx ${toLatexNumber(p0.toFixed(4))},\\quad p(1)=\\frac{1}{\\mu}\\sum_{j=1}^{${levelCount}}n_j(1)p_j\\approx ${toLatexNumber(p1.toFixed(4))} \\]</div>`;
       formulas += `<div class="formula-preview"><span>Производительность и избыточность</span>\\[ R_y=\\frac{H_y}{\\Delta t}\\approx ${toLatexNumber(productivity.toFixed(2))}\\text{ кбит/с}, \\quad \\zeta=1-\\frac{H_y}{\\mu}\\approx ${toLatexNumber(redundancy.toFixed(3))} \\]</div>`;
       formulas += `<div class="stage-panel__info-box"><strong>Синхронная лупа:</strong><br>Нижний фрагмент показывает несколько соседних битов с теми же границами, которые используются в блоках 06–08. Поэтому радиоволна, шум, смесь и стробы детектора дальше сравниваются в одном и том же временном окне.</div>`;
       return { theory, formulas };

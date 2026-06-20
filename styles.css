@@ -898,6 +898,17 @@ details.field summary::-webkit-details-marker {
   list-style: none;
 }
 
+.stage-panel__action {
+  margin: 0 0 10px;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: #1f2b26;
+}
+
+.stage-panel__action strong {
+  color: var(--group-color);
+}
+
 .learning-points li {
   position: relative;
   padding-left: 18px;
@@ -1392,5 +1403,185 @@ details.field summary::-webkit-details-marker {
 
   .field--wide {
     grid-column: auto;
+  }
+}
+
+/* === Мини-тракт для объединённых карточек === */
+.mini-tract {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  margin: 12px 0 4px;
+  background: linear-gradient(135deg, rgba(40, 124, 159, 0.06), rgba(12, 107, 79, 0.04));
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.82rem;
+}
+
+.mini-tract__signal {
+  color: var(--group-color);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.mini-tract__arrow {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.mini-tract__box {
+  display: inline-block;
+  padding: 3px 8px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 0.76rem;
+  color: #1f2b26;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.mini-tract__extra {
+  margin-left: 10px;
+  padding: 3px 8px;
+  background: rgba(117, 84, 170, 0.1);
+  border: 1px solid rgba(117, 84, 170, 0.3);
+  border-radius: 4px;
+  font-size: 0.76rem;
+  color: #7554aa;
+  font-weight: 600;
+}
+
+/* === Блок «Вход → Выход» с классификацией сигналов === */
+.signal-flow-block {
+  padding: 12px 0 4px;
+}
+
+.signal-flow-row {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.signal-flow-cell {
+  flex: 1;
+  display: grid;
+  gap: 4px;
+  padding: 10px 14px;
+  background: #f7faf8;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.signal-flow-cell span {
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--group-color);
+}
+
+.signal-flow-cell strong {
+  font-size: 0.92rem;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  color: #1f2b26;
+}
+
+.signal-flow-arrow {
+  display: flex;
+  align-items: center;
+  font-size: 1.4rem;
+  color: var(--muted);
+}
+
+.signal-flow-change {
+  margin: 8px 0 6px;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.signal-flow-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.signal-flow-types em {
+  font-style: normal;
+  font-weight: 700;
+  color: #1f2b26;
+}
+
+/* === Блок зависимостей === */
+.dependencies-block {
+  padding: 10px 14px;
+  background: #f7faf8;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.dependencies-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.dependencies-row + .dependencies-row {
+  margin-top: 4px;
+}
+
+.dependencies-label {
+  font-weight: 700;
+  color: var(--group-color);
+  white-space: nowrap;
+}
+
+.dependencies-values {
+  color: #1f2b26;
+}
+
+/* === Объяснение изменения параметра === */
+.change-note {
+  padding: 10px 14px;
+  background: linear-gradient(135deg, rgba(232, 148, 58, 0.08), rgba(232, 148, 58, 0.02));
+  border: 1px solid rgba(232, 148, 58, 0.25);
+  border-radius: var(--radius-sm);
+  font-size: 0.84rem;
+  line-height: 1.55;
+  color: #1f2b26;
+  animation: changeNoteFade 6s ease-out forwards;
+}
+
+@keyframes changeNoteFade {
+  0%, 70% { opacity: 1; }
+  100% { opacity: 0.55; }
+}
+
+/* === Адаптивность === */
+@media (max-width: 768px) {
+  .mini-tract {
+    font-size: 0.76rem;
+  }
+
+  .signal-flow-row {
+    flex-direction: column;
+  }
+
+  .signal-flow-arrow {
+    justify-content: center;
+    transform: rotate(90deg);
+  }
+
+  .dependencies-row {
+    flex-direction: column;
+    gap: 2px;
   }
 }

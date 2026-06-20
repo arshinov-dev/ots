@@ -59,13 +59,13 @@
           title: "экспоненциальная корреляционная функция",
           k: 2,
           spectrumLatex: String.raw`G_g(f)=\dfrac{2P_g\beta}{\beta^2+(2\pi f)^2}`,
-          etaLatex: String.raw`\eta=\dfrac{1}{\sqrt{1-\exp\left(-\dfrac{1}{2\alpha^2}\right)}}`,
+          etaLatex: String.raw`\eta=\dfrac{1}{\sqrt{1-\exp\left(-\dfrac{1}{2\alpha}\right)}}`,
         },
         cosineSquared: {
           title: "ограниченная функция вида cos^2",
           k: 1.5,
           spectrumLatex: String.raw`G_g(f)=\mathcal{F}\left\{P_g\cos^2(\pi\beta\tau)\right\}`,
-          etaLatex: String.raw`\eta=\dfrac{1}{\sqrt{1-\cos^2\left(\dfrac{\pi}{3\alpha}\right)}}`,
+          etaLatex: String.raw`\eta=\dfrac{1}{\sqrt{1-\cos^4\left(\dfrac{\pi}{3\alpha}\right)}}`,
         },
         gaussian: {
           title: "гауссовская корреляционная функция",
@@ -77,19 +77,19 @@
           title: "sinc-корреляционная функция",
           k: 1,
           spectrumLatex: String.raw`G_g(f)=\begin{cases}\dfrac{P_g}{2\beta},& |f|\le\beta,\\0,& |f|>\beta,\end{cases}`,
-          etaLatex: String.raw`\eta=1`,
+          etaLatex: String.raw`\eta=\dfrac{1}{\sqrt{1-\left(\dfrac{\sin(\pi/\alpha)}{\pi/\alpha}\right)^2}}`,
         },
         sincSquared: {
           title: "квадрат sinc-корреляционной функции",
           k: 1,
           spectrumLatex: String.raw`G_g(f)=\dfrac{P_g}{2\beta}\Lambda\left(\dfrac{f}{2\beta}\right)`,
-          etaLatex: String.raw`\eta=1`,
+          etaLatex: String.raw`\eta=\dfrac{1}{\sqrt{1-\left(\dfrac{\sin(\pi/\alpha)}{\pi/\alpha}\right)^4}}`,
         },
         cosineRatio: {
           title: "дробно-косинусная корреляционная функция",
           k: 4,
           spectrumLatex: String.raw`G_g(f)=\mathcal{F}\left\{\dfrac{P_g\cos(2\pi\beta\tau)}{1-(4\beta\tau)^2}\right\}`,
-          etaLatex: String.raw`\eta=\dfrac{1}{\sqrt{1-\cos^2\left(\dfrac{\pi}{3\alpha}\right)}}`,
+          etaLatex: String.raw`\eta=\dfrac{1}{\sqrt{1-\left(\dfrac{\cos(\pi/(4\alpha))}{1-1/(4\alpha^2)}\right)^2}}`,
         },
         cosineLimited: {
           title: "ограниченная косинусная корреляционная функция",
@@ -101,7 +101,7 @@
           title: "экспоненциально-линейная корреляционная функция",
           k: 2,
           spectrumLatex: String.raw`G_g(f)=\mathcal{F}\left\{P_g(1-\beta|\tau|)e^{-\beta|\tau|}\right\}`,
-          etaLatex: String.raw`\eta=\dfrac{1}{\sqrt{1-\exp\left(-\dfrac{1}{2\alpha^2}\right)}}`,
+          etaLatex: String.raw`\eta=\dfrac{1}{\sqrt{1-\left(1-\dfrac{0{,}25}{\alpha}\right)^2\exp\left(-\dfrac{1}{2\alpha}\right)}}`,
         },
       };
       const meta = metas[kind] || metas.exponential;
@@ -148,13 +148,23 @@
     function getEta(params) {
       const alpha = safeNumber(params.samplingIncrease, 2);
       const kind = getCorrelationKind(params);
-      if (["cosineSquared", "cosineRatio", "cosineLimited"].includes(kind)) {
-        const denominator = 1 - Math.pow(Math.cos(Math.PI / (3 * alpha)), 2);
-        return denominator > 0 ? 1 / Math.sqrt(denominator) : 1;
+      // Делегируем в общий модуль Calculations, чтобы формула, расчёт и LaTeX
+      // всегда соответствовали таблице 2 методички.
+      if (window.Calculations && window.Calculations.computeEta) {
+        return window.Calculations.computeEta(kind, alpha).value;
       }
-      if (["sinc", "sincSquared"].includes(kind)) return 1;
-      const denominator = 1 - Math.exp(-1 / (2 * alpha * alpha));
-      return denominator > 0 ? 1 / Math.sqrt(denominator) : 1;
+      // Fallback (если calculations.js не загружен) — тот же набор формул.
+      const formulas = {
+        exponential: () => 1 / Math.sqrt(Math.max(1e-12, 1 - Math.exp(-1 / (2 * alpha)))),
+        cosineSquared: () => { const c = Math.cos(Math.PI / (3 * alpha)); return 1 / Math.sqrt(Math.max(1e-12, 1 - c * c * c * c)); },
+        gaussian: () => 1 / Math.sqrt(Math.max(1e-12, 1 - Math.exp(-1 / (2 * alpha * alpha)))),
+        sinc: () => { const a = Math.PI / alpha; const s = Math.abs(a) < 1e-9 ? 1 : Math.sin(a) / a; return 1 / Math.sqrt(Math.max(1e-12, 1 - s * s)); },
+        sincSquared: () => { const a = Math.PI / alpha; const s = Math.abs(a) < 1e-9 ? 1 : Math.sin(a) / a; const r = s * s; return 1 / Math.sqrt(Math.max(1e-12, 1 - r * r)); },
+        cosineRatio: () => { const d = 1 - 1 / (4 * alpha * alpha); if (Math.abs(d) < 1e-12) return 1; const r = Math.cos(Math.PI / (4 * alpha)) / d; return 1 / Math.sqrt(Math.max(1e-12, 1 - r * r)); },
+        cosineLimited: () => { const c = Math.cos(Math.PI / (3 * alpha)); return 1 / Math.sqrt(Math.max(1e-12, 1 - c * c)); },
+        exponentialLinear: () => { const r = (1 - 0.25 / alpha) * Math.exp(-1 / (4 * alpha)); return 1 / Math.sqrt(Math.max(1e-12, 1 - r * r)); },
+      };
+      return (formulas[kind] || formulas.exponential)();
     }
 
     function getLevelProbabilitiesAnalytic(params, thresholds, levels) {

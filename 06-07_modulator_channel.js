@@ -9,55 +9,38 @@
       }
 
       function getDigitalBandwidth(params) {
-        const alpha = safeNumber(params.samplingIncrease, 2);
-        const dfg = safeNumber(params.signalBandwidth, 28);
-        const fd = 2 * alpha * dfg;
-        const tauSim = 1 / (fd * 4);
-        const k1 = 2;
-        return k1 / tauSim;
+        return (window.SignalData?.calculation || window.SystemCalculations.calculate(params)).coding.dfPcm;
       }
 
       function getBandwidthParams(params) {
-        const alpha = safeNumber(params.samplingIncrease, 2);
-        const dfg = safeNumber(params.signalBandwidth, 28);
-        const fd = 2 * alpha * dfg;
-        const mu = 4;
-        const tauSim = 1 / (fd * mu);
-        const k1 = 2;
-        const df_pcm = k1 / tauSim;
-        const f0 = safeNumber(params.primaryFrequency, 60);
-        const f1 = safeNumber(params.secondaryFrequency, f0 + 1.5);
-        const deltaCarrierKhz = Math.abs(f1 - f0) * 1000;
-        let df_s = 2 * df_pcm;
-        let description = "ДАМ: полоса модулированного сигнала вдвое шире цифрового сигнала.";
-        let formulaLatex = "\\Delta f_s=2\\Delta f_{ц}";
-
-        if (params.modulation === "DCHM") {
-          df_s = deltaCarrierKhz + 2 * df_pcm;
-          description = "ДЧМ: полоса включает разнос несущих f1 и f2 и боковые составляющие цифрового сигнала.";
-          formulaLatex = "\\Delta f_s=|f_1-f_2|+2\\Delta f_{ц}";
-        } else if (params.modulation === "DOFM") {
-          const phaseIndex = Math.PI / 2;
-          df_s = 2 * (phaseIndex + 1) * df_pcm;
-          description = "ДОФМ: спектр берётся как у фазовой манипуляции с индексом m_ф=π/2.";
-          formulaLatex = "\\Delta f_s=2(m_ф+1)\\Delta f_{ц},\\quad m_ф=\\pi/2";
-        }
-
-        return { fd, mu, tauSim, k1, df_pcm, df_s, deltaCarrierKhz, description, formulaLatex };
+        const calculation = window.SignalData?.calculation || window.SystemCalculations.calculate(params);
+        return {
+          fd: calculation.sampling.fd,
+          mu: calculation.coding.mu,
+          tauSim: calculation.coding.tauSim,
+          k1: calculation.coding.k1,
+          df_pcm: calculation.coding.dfPcm,
+          df_s: calculation.radio.dfSignal,
+          deltaCarrierKhz: calculation.radio.deltaCarrierKhz,
+          description: calculation.radio.bandwidthDescription,
+          formulaLatex: calculation.radio.bandwidthFormulaLatex,
+        };
       }
 
       function getPowerParams(params) {
         const bandwidth = getBandwidthParams(params);
-        const df_s = bandwidth.df_s;
-        const N0 = safeNumber(params.noiseDensity, 0.0001);
-        const h2 = safeNumber(params.signalNoiseRatio, 8.5);
-        const P_sh = N0 * df_s;
-        const P_c = h2 * P_sh;
-        const symbolPower = params.modulation === "DAM" ? P_c / 2 : P_c;
-        const Um = params.modulation === "DAM" ? Math.sqrt(symbolPower) : Math.sqrt(2 * symbolPower);
-        const sigmaNoise = Math.sqrt(P_sh);
-        const capacity = df_s * Math.log2(1 + h2);
-        return { ...bandwidth, N0, h2, P_sh, P_c, symbolPower, Um, sigmaNoise, capacity };
+        const calculation = window.SignalData?.calculation || window.SystemCalculations.calculate(params);
+        return {
+          ...bandwidth,
+          N0: calculation.input.N0,
+          h2: calculation.input.h2,
+          P_sh: calculation.radio.noisePower,
+          P_c: calculation.radio.signalPower,
+          symbolPower: calculation.radio.symbolPower,
+          Um: calculation.radio.Um,
+          sigmaNoise: calculation.radio.sigmaNoise,
+          capacity: calculation.radio.capacity,
+        };
       }
 
       function getCarrierMHz(params, bit = 1) {
@@ -135,9 +118,10 @@
       function getZoomInfo(SignalData, size = 5) {
         const zoom = window.VisualMath.getZoomWindow(SignalData, size);
         const numBits = Math.max(1, SignalData.b_t?.length || 1);
-        const pointsPerBit = SignalData.N / numBits;
+        const radioN = SignalData.radio_N || SignalData.N;
+        const pointsPerBit = SignalData.radio_points_per_bit || (radioN / numBits);
         const startIdx = Math.max(0, Math.floor(zoom.start * pointsPerBit));
-        const endIdx = Math.min(SignalData.N - 1, Math.max(startIdx + 1, Math.ceil(zoom.end * pointsPerBit)));
+        const endIdx = Math.min(radioN - 1, Math.max(startIdx + 1, Math.ceil(zoom.end * pointsPerBit)));
         return { ...zoom, pointsPerBit, startIdx, endIdx };
       }
 
@@ -149,9 +133,11 @@
     // ==========================================
     window.StageHandlers.modulator = {
         process: function(params, SignalData) {
-            const N = SignalData.N;
             const numBits = SignalData.b_t.length;
-            const pointsPerBit = Math.max(1, N / numBits);
+            const pointsPerBit = (SignalData.calculation || window.SystemCalculations.calculate(params)).runtime.radioSamplesPerBit;
+            const N = Math.max(1, numBits * pointsPerBit);
+            SignalData.radio_N = N;
+            SignalData.radio_points_per_bit = pointsPerBit;
 
             // Визуальные частоты сохраняют физический смысл: выше частота в форме — больше периодов на графике.
             const carrierCycles = window.RadioMath.getCarrierCycles(params);
@@ -384,7 +370,7 @@
     // ==========================================
     window.StageHandlers.channel = {
         process: function(params, SignalData) {
-            const N = SignalData.N;
+            const N = SignalData.S_t.length;
             const power = window.RadioMath.getPowerParams(params);
             const noiseSigma = power.sigmaNoise;
             SignalData.noiseSigma = noiseSigma;
