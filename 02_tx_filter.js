@@ -79,7 +79,7 @@
       const y = (value) => Hf - ((value - 0) / (spectrumPeak * 1.08)) * Hf;
       const x = (frequency) => ((frequency + fMax) / (2 * fMax)) * W;
       let freqSvg = `<svg viewBox="0 0 ${W} ${Hf}" width="100%" height="auto" class="stage-panel__visuals-svg spectrum-plot spectrum-plot--continuous">`;
-      freqSvg += vm.axes(W, Hf, Hf - 18, "f, кГц", "Gg(f), В²/кГц", {
+      freqSvg += vm.axes(W, Hf, Hf - 18, "f, кГц", "G_g(f), В²/кГц", {
         xMin: -fMax, xMax: fMax, yMin: 0, yMax: spectrumPeak * 1.08, note: "энергетическое распределение"
       });
       freqSvg += vm.drawXYCurve(spectrumSamples, W, Hf, -fMax, fMax, 0, spectrumPeak * 1.08, "#287c9f", 2.4, 0.4);
@@ -93,12 +93,12 @@
         <text class="plot-note" x="${x(-dfg) - 8}" y="34" text-anchor="end">−fср</text>
         <text class="plot-note" x="${x(dfg) + 8}" y="34">fср=Δfg</text>`;
       freqSvg += `</svg>`;
-      const timeLegend = `<dl class="visual-scale"><div><dt>До ФНЧ</dt><dd><span class="legend-line legend-line--source"></span>g(t)</dd></div><div><dt>После ФНЧ</dt><dd><span class="legend-line legend-line--filtered"></span>x(t)</dd></div><div><dt>Общее окно</dt><dd>${(timeEnd - timeStart).toFixed(3)} мс</dd></div></dl>`;
-      const spectrumLegend = `<dl class="visual-scale"><div><dt>До ФНЧ</dt><dd><span class="legend-line legend-line--source"></span>Gg(f)</dd></div><div><dt>После ФНЧ</dt><dd><span class="legend-line legend-line--filtered"></span>Gx(f)</dd></div><div><dt>Срез</dt><dd>fср=Δfg=${dfg.toFixed(2)} кГц</dd></div></dl>`;
+      const timeLegend = `<dl class="visual-scale"><div><dt>До ФНЧ</dt><dd><span class="legend-line legend-line--source"></span>\\(g(t)\\)</dd></div><div><dt>После ФНЧ</dt><dd><span class="legend-line legend-line--filtered"></span>\\(x(t)\\)</dd></div><div><dt>Общее окно</dt><dd>${(timeEnd - timeStart).toFixed(3)} мс</dd></div></dl>`;
+      const spectrumLegend = `<dl class="visual-scale"><div><dt>До ФНЧ</dt><dd><span class="legend-line legend-line--source"></span>\\(G_g(f)\\)</dd></div><div><dt>После ФНЧ</dt><dd><span class="legend-line legend-line--filtered"></span>\\(G_x(f)\\)</dd></div><div><dt>Срез</dt><dd>\\(f_{ср}=\\Delta f_g=${dfg.toFixed(2)}\\) кГц</dd></div></dl>`;
 
       return `<div class="stage-panel__visuals-stack">
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">1. Во времени: g(t) до ФНЧ и x(t) после ФНЧ</p>${timeLegend}${timeSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">2. В спектре: Gg(f) и пропущенная часть Gx(f)</p>${spectrumLegend}${freqSvg}<div class="stage-panel__info-box">Высокочастотные составляющие подавлены, поэтому часть мощности теряется.</div></div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">1. Во времени: \\(g(t)\\) до ФНЧ и \\(x(t)\\) после ФНЧ</p>${timeLegend}${timeSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">2. В спектре: \\(G_g(f)\\) и пропущенная часть \\(G_x(f)\\)</p>${spectrumLegend}${freqSvg}<div class="stage-panel__info-box">Высокочастотные составляющие подавлены, поэтому часть мощности теряется.</div></div>
       </div>`;
     },
 

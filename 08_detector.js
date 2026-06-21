@@ -51,150 +51,150 @@
     return { value, label, latex, h, h2 };
   }
 
-  // === Функциональная схема приёмника для каждой пары модуляция + способ приёма ===
+  // === Функциональная схема приёмника (одна строка, ≤5 блоков) ===
   function buildReceiverSchemeSVG(params, W) {
-    const H = 110;
+    const H = 140;
     const mod = params.modulation;
     const rx = params.reception;
-    const boxW = 72, boxH = 28, gap = 14;
-    const yMid = H / 2 - 4;
+    const boxW = 92, boxH = 40, gap = 18;
+    const yMid = H / 2;
     let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="auto" class="stage-panel__visuals-svg receiver-scheme">`;
 
-    const box = (x, label, fill, sub) => {
-      const cy = yMid;
-      svg += `<rect x="${x}" y="${cy - boxH/2}" width="${boxW}" height="${boxH}" rx="6" fill="${fill}" stroke="#1f2b26" stroke-width="1.2" />`;
-      svg += `<text x="${x + boxW/2}" y="${cy + (sub ? -2 : 4)}" fill="#ffffff" font-family="monospace" font-size="10" text-anchor="middle" font-weight="bold">${label}</text>`;
-      if (sub) svg += `<text x="${x + boxW/2}" y="${cy + 10}" fill="#e8f0ed" font-family="monospace" font-size="8" text-anchor="middle">${sub}</text>`;
+    const box = (x, label, fill, sub = "") => {
+      svg += `<rect x="${x}" y="${yMid - boxH/2}" width="${boxW}" height="${boxH}" rx="8" fill="${fill}" stroke="#1f2b26" stroke-width="1.4" />`;
+      svg += `<text x="${x + boxW/2}" y="${yMid + (sub ? -3 : 4)}" fill="#ffffff" font-family="monospace" font-size="13" text-anchor="middle" font-weight="bold">${label}</text>`;
+      if (sub) svg += `<text x="${x + boxW/2}" y="${yMid + 14}" fill="#e8f0ed" font-family="monospace" font-size="10" text-anchor="middle">${sub}</text>`;
     };
-    const arrow = (x1, x2, y = yMid) => {
-      svg += `<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="#31433b" stroke-width="1.4" />`;
-      svg += `<path d="M ${x2 - 5} ${y - 3} L ${x2} ${y} L ${x2 - 5} ${y + 3}" fill="none" stroke="#31433b" stroke-width="1.4" />`;
+    const arrow = (x1, x2) => {
+      svg += `<line x1="${x1}" y1="${yMid}" x2="${x2}" y2="${yMid}" stroke="#31433b" stroke-width="2" />`;
+      svg += `<path d="M ${x2 - 6} ${yMid - 4} L ${x2} ${yMid} L ${x2 - 6} ${yMid + 4}" fill="none" stroke="#31433b" stroke-width="2" />`;
     };
-    const label = (x, text, y = yMid + 4, color = "#287c9f", size = 11) => {
-      svg += `<text x="${x}" y="${y}" fill="${color}" font-family="monospace" font-size="${size}" text-anchor="middle">${text}</text>`;
+    const ioLabel = (x, text, anchor = "middle") => {
+      svg += `<text x="${x}" y="${yMid + 5}" fill="#287c9f" font-family="monospace" font-size="15" text-anchor="${anchor}" font-weight="bold">${text}</text>`;
     };
 
+    let blocks = [];
     if (mod === "DAM") {
-      let x = 50;
-      label(x - 18, "z(t)", yMid, "#287c9f", 12);
-      arrow(x - 8, x);
-      box(x, "ППФ", "#287c9f");
-      arrow(x + boxW, x + boxW + gap);
-      x += boxW + gap;
-      const detFill = rx === "KO" ? "#0c6b4f" : "#7554aa";
-      const detSub = rx === "KO" ? "когерентн." : "огибающей";
-      box(x, "Детектор", detFill, detSub);
-      arrow(x + boxW, x + boxW + gap);
-      x += boxW + gap;
-      box(x, "Дискрет.", "#62716b");
-      arrow(x + boxW, x + boxW + gap);
-      x += boxW + gap;
-      box(x, "РУ", "#e74c3c");
-      arrow(x + boxW, x + boxW + gap + 4);
-      x += boxW + gap;
-      label(x + 4, "b̂ₖᵘ", yMid, "#0c6b4f", 12);
-      if (rx === "KO") {
-        const detX = 50 + boxW + gap;
-        svg += `<text x="${detX + boxW/2}" y="${yMid + boxH/2 + 22}" fill="#0c6b4f" font-family="monospace" font-size="10" text-anchor="middle">u_г(t)</text>`;
-        svg += `<line x1="${detX + boxW/2}" y1="${yMid + boxH/2 + 10}" x2="${detX + boxW/2}" y2="${yMid + boxH/2}" stroke="#0c6b4f" stroke-width="1.4" />`;
-        svg += `<path d="M ${detX + boxW/2 - 3} ${yMid + boxH/2 + 5} L ${detX + boxW/2} ${yMid + boxH/2} L ${detX + boxW/2 + 3} ${yMid + boxH/2 + 5}" fill="none" stroke="#0c6b4f" stroke-width="1.4" />`;
-      }
-      svg += `<text x="${x - boxW - gap + 12}" y="${yMid + boxH/2 + 18}" fill="#62716b" font-family="monospace" font-size="9">U₀ = Um/2</text>`;
+      blocks = [
+        { label: "ППФ", fill: "#287c9f" },
+        { label: rx === "KO" ? "Дет." : "АД", fill: rx === "KO" ? "#0c6b4f" : "#7554aa", sub: rx === "KO" ? "когер." : "огиб." },
+        { label: "Строб", fill: "#62716b" },
+        { label: "РУ", fill: "#e74c3c" },
+      ];
+    } else if (mod === "DCHM") {
+      blocks = [
+        { label: "ППФ₁,₂", fill: "#287c9f", sub: "f₁ и f₂" },
+        { label: rx === "KO" ? "Дет.₁,₂" : "АД₁,₂", fill: rx === "KO" ? "#0c6b4f" : "#7554aa", sub: rx === "KO" ? "когер." : "огиб." },
+        { label: "ВУ", fill: "#e8943a" },
+        { label: "РУ", fill: "#e74c3c" },
+      ];
+    } else if (rx === "SF") {
+      blocks = [
+        { label: "ППФ", fill: "#287c9f" },
+        { label: "ФД + ЛЗ", fill: "#0c6b4f", sub: "сравн. фаз" },
+        { label: "Строб", fill: "#62716b" },
+        { label: "РУ", fill: "#e74c3c" },
+      ];
+    } else {
+      blocks = [
+        { label: "ППФ", fill: "#287c9f" },
+        { label: "ФД", fill: "#0c6b4f", sub: "когер." },
+        { label: "ЛЗ", fill: "#62716b" },
+        { label: "Сравн.", fill: "#e8943a", sub: "полярн." },
+        { label: "РУ", fill: "#e74c3c" },
+      ];
     }
-    else if (mod === "DCHM") {
-      const y1 = yMid - 22, y2 = yMid + 22;
-      let x = 50;
-      label(x - 18, "z(t)", yMid, "#287c9f", 12);
-      arrow(x - 8, x, y1);
-      arrow(x - 8, x, y2);
-      box(x, "ППФ₂", "#287c9f", "f₂");
-      const x2 = x + boxW + gap;
-      box(x2, "ППФ₁", "#287c9f", "f₁");
-      arrow(x + boxW, x + boxW + gap, y1);
-      arrow(x2 + boxW, x2 + boxW + gap, y2);
-      const detFill = rx === "KO" ? "#0c6b4f" : "#7554aa";
-      const detSub = rx === "KO" ? "когерентн." : "огибающей";
-      const d1X = x + boxW + gap;
-      box(d1X, "Дет.₂", detFill, detSub);
-      const d2X = x2 + boxW + gap;
-      box(d2X, "Дет.₁", detFill, detSub);
-      const vuX = Math.max(d1X, d2X) + boxW + gap;
-      arrow(d1X + boxW, vuX, y1);
-      arrow(d2X + boxW, vuX, y2);
-      box(vuX, "ВУ", "#e8943a");
-      arrow(vuX + boxW, vuX + boxW + gap, yMid);
-      const discX = vuX + boxW + gap;
-      box(discX, "Дискрет.", "#62716b");
-      arrow(discX + boxW, discX + boxW + gap, yMid);
-      const ruX = discX + boxW + gap;
-      box(ruX, "РУ", "#e74c3c");
-      arrow(ruX + boxW, ruX + boxW + gap + 4, yMid);
-      label(ruX + boxW + gap + 4, "b̂ₖᵘ", yMid, "#0c6b4f", 12);
-      svg += `<text x="${ruX - boxW - gap + 12}" y="${yMid + boxH/2 + 18}" fill="#62716b" font-family="monospace" font-size="9">U₀ = 0</text>`;
-    }
-    else { // DOFM
-      let x = 50;
-      label(x - 18, "z(t)", yMid, "#287c9f", 12);
-      arrow(x - 8, x);
-      box(x, "ППФ", "#287c9f");
-      arrow(x + boxW, x + boxW + gap);
-      x += boxW + gap;
 
-      if (rx === "SF") {
-        box(x, "Фазовый", "#0c6b4f", "детектор");
-        const lzX = x;
-        svg += `<rect x="${x + boxW + 4}" y="${yMid + boxH/2 + 4}" width="52" height="22" rx="4" fill="#62716b" stroke="#1f2b26" stroke-width="1" />`;
-        svg += `<text x="${x + boxW + 30}" y="${yMid + boxH/2 + 18}" fill="#ffffff" font-family="monospace" font-size="9" text-anchor="middle">ЛЗ τ_и</text>`;
-        svg += `<line x1="${x + boxW/2}" y1="${yMid + boxH/2}" x2="${x + boxW/2}" y2="${yMid + boxH/2 + 16}" stroke="#62716b" stroke-width="1.4" />`;
-        svg += `<line x1="${x + boxW/2}" y1="${yMid + boxH/2 + 16}" x2="${x + boxW + 4}" y2="${yMid + boxH/2 + 16}" stroke="#62716b" stroke-width="1.4" />`;
-        svg += `<line x1="${x + boxW + 4}" y1="${yMid + boxH/2 + 16}" x2="${x + boxW + 4}" y2="${yMid + boxH/2}" stroke="#62716b" stroke-width="1.4" />`;
-        svg += `<path d="M ${x + boxW + 1} ${yMid + boxH/2 - 3} L ${x + boxW + 4} ${yMid + boxH/2} L ${x + boxW + 7} ${yMid + boxH/2 - 3}" fill="none" stroke="#62716b" stroke-width="1.4" />`;
-      } else {
-        box(x, "Фазовый", "#0c6b4f", "детектор");
-        const fonX = x + boxW/2;
-        svg += `<text x="${fonX}" y="${yMid + boxH/2 + 22}" fill="#0c6b4f" font-family="monospace" font-size="9" text-anchor="middle">u_г(t) (ФОН)</text>`;
-        svg += `<line x1="${fonX}" y1="${yMid + boxH/2 + 10}" x2="${fonX}" y2="${yMid + boxH/2}" stroke="#0c6b4f" stroke-width="1.4" />`;
-        svg += `<path d="M ${fonX - 3} ${yMid + boxH/2 + 5} L ${fonX} ${yMid + boxH/2} L ${fonX + 3} ${yMid + boxH/2 + 5}" fill="none" stroke="#0c6b4f" stroke-width="1.4" />`;
-      }
-      arrow(x + boxW, x + boxW + gap);
-      x += boxW + gap;
-
-      if (rx === "SP") {
-        box(x, "ЛЗ τ_и", "#62716b");
-        arrow(x + boxW, x + boxW + gap);
-        x += boxW + gap;
-        box(x, "Сравн.", "#e8943a", "полярн.");
+    const totalWidth = blocks.length * boxW + (blocks.length - 1) * gap;
+    let x = (W - totalWidth) / 2 - 40;
+    ioLabel(x, "z(t)", "end");
+    x += 36;
+    arrow(x - 10, x);
+    blocks.forEach((b, i) => {
+      box(x, b.label, b.fill, b.sub);
+      if (i < blocks.length - 1) {
         arrow(x + boxW, x + boxW + gap);
         x += boxW + gap;
       }
+    });
+    x += boxW;
+    arrow(x, x + 10);
+    ioLabel(x + 20, "b[k]", "start");
 
-      box(x, "Дискрет.", "#62716b");
-      arrow(x + boxW, x + boxW + gap);
-      x += boxW + gap;
-      box(x, "РУ", "#e74c3c");
-      arrow(x + boxW, x + boxW + gap + 4);
-      x += boxW + gap;
-      label(x + 4, "b̂ₖᵘ", yMid, "#0c6b4f", 12);
-      svg += `<text x="${x - boxW - gap + 12}" y="${yMid + boxH/2 + 18}" fill="#62716b" font-family="monospace" font-size="9">U₀ = 0</text>`;
+    // Опорное колебание для когерентных режимов
+    if ((mod === "DAM" && rx === "KO") || (mod === "DOFM" && rx === "SP")) {
+      const detX = (W - totalWidth) / 2 - 40 + 36 + boxW + gap / 2;
+      svg += `<text x="${detX}" y="${yMid + boxH/2 + 26}" fill="#0c6b4f" font-family="monospace" font-size="12" text-anchor="middle">u_г(t)</text>`;
+      svg += `<line x1="${detX}" y1="${yMid + boxH/2 + 12}" x2="${detX}" y2="${yMid + boxH/2}" stroke="#0c6b4f" stroke-width="1.6" />`;
+      svg += `<path d="M ${detX - 4} ${yMid + boxH/2 + 6} L ${detX} ${yMid + boxH/2} L ${detX + 4} ${yMid + boxH/2 + 6}" fill="none" stroke="#0c6b4f" stroke-width="1.6" />`;
     }
 
     svg += `</svg>`;
     return svg;
   }
 
+  function getReceiverSchemeNote(params) {
+    const mod = params.modulation, rx = params.reception;
+    const modeName = `${mod}-${rx}`;
+    const tract = {
+      "DAM-KO": "z(t) \\to \\text{ППФ} \\to \\text{когерентный детектор} \\to \\text{РУ} \\to \\hat b_k^\\mu",
+      "DAM-NO": "z(t) \\to \\text{ППФ} \\to \\text{детектор огибающей} \\to \\text{РУ} \\to \\hat b_k^\\mu",
+      "DCHM-KO": "z(t) \\to \\text{ППФ}_{1,2} \\to \\text{когерентные детекторы} \\to \\text{ВУ} \\to \\text{РУ} \\to \\hat b_k^\\mu",
+      "DCHM-NO": "z(t) \\to \\text{ППФ}_{1,2} \\to \\text{детекторы огибающей} \\to \\text{ВУ} \\to \\text{РУ} \\to \\hat b_k^\\mu",
+      "DOFM-SF": "z(t) \\to \\text{ППФ} \\to \\text{фазовый детектор с ЛЗ} \\to \\text{РУ} \\to \\hat b_k^\\mu",
+      "DOFM-SP": "z(t) \\to \\text{ППФ} \\to \\text{фазовый детектор} \\to \\text{ЛЗ} \\to \\text{сравнение полярностей} \\to \\hat b_k^\\mu",
+    }[modeName] || "z(t) \\to \\text{ППФ} \\to \\text{демодулятор} \\to \\text{РУ} \\to \\hat b_k^\\mu";
+    return `<div class="receiver-scheme-note">
+      <p><strong>Используется эта схема, потому что выбран режим: ${modeName}.</strong></p>
+      <p>\\( ${tract} \\)</p>
+    </div>`;
+  }
+
   function getReceiverDescription(params) {
     const mod = params.modulation, rx = params.reception;
     if (mod === "DAM" && rx === "KO")
-      return "z(t) → ППФ → когерентный детектор (перемножитель с опорным колебанием u_г(t) + ФНЧ) → дискретизатор → РУ (порог U₀ = U_m/2)";
+      return "\\( z(t) \\to \\text{ППФ} \\to \\text{когерентный детектор} \\to \\text{РУ} \\to \\hat b_k^\\mu \\), где \\(u_\\text{д}(t)=z(t)\\cdot u_\\text{г}(t)\\), \\(U_0=U_m/2\\)";
     if (mod === "DAM")
-      return "z(t) → ППФ → амплитудный детектор огибающей + ФНЧ → дискретизатор → РУ (порог U₀ = U_m/2)";
+      return "\\( z(t) \\to \\text{ППФ} \\to \\text{детектор огибающей} \\to \\text{РУ} \\to \\hat b_k^\\mu \\), \\(U_0=U_m/2\\)";
     if (mod === "DCHM" && rx === "KO")
-      return "z(t) → ППФ₁(f₁) → когерентный детектор₁ ─┐ → ВУ → дискретизатор → РУ (порог U₀ = 0). Аналогично ППФ₂(f₂) → детектор₂";
+      return "\\( z(t) \\to \\text{ППФ}_1(f_1) \\to \\text{ког. дет.}_1 \\to \\text{ВУ} \\to \\text{РУ} \\to \\hat b_k^\\mu \\), аналогично \\(\\text{ППФ}_2(f_2)\\), \\(U_0=0\\)";
     if (mod === "DCHM")
-      return "z(t) → ППФ₁(f₁) → амплитудный детектор₁ огибающей ─┐ → ВУ → дискретизатор → РУ (порог U₀ = 0). Аналогично ППФ₂(f₂) → детектор₂";
+      return "\\( z(t) \\to \\text{ППФ}_1(f_1) \\to \\text{дет. огиб.}_1 \\to \\text{ВУ} \\to \\text{РУ} \\to \\hat b_k^\\mu \\), аналогично \\(\\text{ППФ}_2(f_2)\\), \\(U_0=0\\)";
     if (rx === "SF")
-      return "z(t) → ППФ → фазовый детектор с линией задержки τ_и (сравнение фаз текущей и предыдущей посылок) → дискретизатор → РУ (порог U₀ = 0)";
-    return "z(t) → ППФ → фазовый детектор с ФОН → ЛЗ τ_и → сравнение полярностей → дискретизатор → РУ (порог U₀ = 0)";
+      return "\\( z(t) \\to \\text{ППФ} \\to \\text{фазовый детектор с ЛЗ} \\to \\text{РУ} \\to \\hat b_k^\\mu \\), \\(U_0=0\\)";
+    return "\\( z(t) \\to \\text{ППФ} \\to \\text{фазовый детектор с ФОН} \\to \\text{ЛЗ} \\to \\text{сравнение полярностей} \\to \\text{РУ} \\to \\hat b_k^\\mu \\), \\(U_0=0\\)";
+  }
+
+  function buildDecisionRuleBlock(params, u0_val) {
+    const mod = params.modulation, rx = params.reception;
+    const node = (label) => `<span class="decision-rule-node">${label}</span>`;
+    const arrow = `<span class="decision-rule-arrow">→</span>`;
+    if (mod === "DAM") {
+      return `<div class="stage-panel__info-box decision-rule-box">
+        <strong>Правило РУ (ДАМ):</strong>
+        <span>один отклик \(U_k\) сравнивается с порогом \(U_0=${u0_val.toFixed(4)}\) В:</span>
+        <span class="decision-rule-formula">\\( \\hat b_k = \\begin{cases} 1, & U_k > U_0 \\\\ 0, & U_k \\le U_0 \\end{cases} \\)</span>
+      </div>`;
+    }
+    if (mod === "DCHM") {
+      return `<div class="stage-panel__info-box decision-rule-box">
+        <strong>Правило РУ (ДЧМ):</strong>
+        <span>два отклика \(U_{1,k}\) и \(U_{2,k}\) подаются на вычитатель:</span>
+        <span class="decision-rule-formula">\\( \\hat b_k = \\begin{cases} 1, & U_{2,k} > U_{1,k} \\\\ 0, & U_{2,k} \\le U_{1,k} \\end{cases} \\)</span>
+      </div>`;
+    }
+    if (rx === "SF") {
+      return `<div class="stage-panel__info-box decision-rule-box">
+        <strong>Правило РУ (ДОФМ-СФ):</strong>
+        <span>фазовый детектор сравнивает текущую и предыдущую посылки:</span>
+        <span class="decision-rule-formula">\\( U_k = z_k \\cdot z_{k-1}, \\quad \\hat b_k = \\operatorname{sign}(U_k) \\)</span>
+      </div>`;
+    }
+    return `<div class="stage-panel__info-box decision-rule-box">
+      <strong>Правило РУ (ДОФМ-СП):</strong>
+      <span>цепочка принятия решения по полярностям:</span>
+      <div class="decision-rule-chain">${node("\\(d_k\\)")}${arrow}${node("\\(d_k \\cdot d_{k-1}\\)")}${arrow}${node("\\(\\operatorname{sign}\\)")}${arrow}${node("\\(\\hat b_k\\)")}</div>
+    </div>`;
   }
 
   window.StageHandlers.detector = {
@@ -358,134 +358,54 @@
     },
 
     renderSVG: function(id, params, helpers, SignalData) {
-      const { W, getX } = helpers;
+      const { W } = helpers;
       const zoom = window.RadioMath.getZoomInfo(SignalData, 10);
-      const bitStepX = W / Math.max(1, zoom.length);
-      const xOfIndex = (index) => ((index - zoom.startIdx) / Math.max(1, zoom.endIdx - zoom.startIdx)) * W;
+      const u0_val = params.modulation === "DAM" ? SignalData.Um / 2 : 0;
 
       // --- Функциональная схема приёмника ---
       const schemeSvg = buildReceiverSchemeSVG(params, W);
-      const schemeDesc = SignalData.receiver_desc || getReceiverDescription(params);
-      const schemeLayer = `<div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header"><strong style="color:#1f2b26">Функциональная схема демодулятора (${params.modulation}-${params.reception})</strong></p><div class="receiver-scheme-note">${schemeDesc}</div>${schemeSvg}</div>`;
+      const schemeNote = getReceiverSchemeNote(params);
+      const schemeLayer = `<div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Функциональная схема приёмника</p>${schemeNote}${schemeSvg}</div>`;
 
-      // --- z(t) с стробами ---
-      let topH = 180, topY0 = topH / 2;
-      let topSVG = `<svg viewBox="0 0 ${W} ${topH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
-      let u0_val = params.modulation === "DAM" ? SignalData.Um / 2 : 0;
-      let maxZ = SignalData.zMax || Math.max(...SignalData.z_t.map(Math.abs), 1.5 * SignalData.Um);
-      if (maxZ === 0) maxZ = 1;
-      const yOf = (value) => topY0 - (value / maxZ) * (topH * 0.4);
-      let zD = `M 0 ${topY0}`;
-      for (let i = zoom.startIdx; i <= zoom.endIdx; i++) {
-        let y = yOf(SignalData.z_t[i]);
-        if (y < -10) y = -10; if (y > topH + 10) y = topH + 10;
-        zD += ` L ${xOfIndex(i)} ${y}`;
-      }
-      topSVG += `<path d="${zD}" stroke="#287c9f" stroke-width="2" fill="none" stroke-opacity="0.8" stroke-linejoin="round" />`;
-      for (let i = 0; i <= zoom.length; i++) {
-        const x = i * bitStepX;
-        topSVG += `<line x1="${x}" y1="0" x2="${x}" y2="${topH}" stroke="rgba(98,113,107,0.18)" stroke-dasharray="3,8" />`;
-      }
-      SignalData.detectorTrace.slice(zoom.start, zoom.end).forEach((trace) => {
-        const x = xOfIndex(trace.midIdx);
-        const y = yOf(trace.strobeValue);
-        topSVG += `<line x1="${x}" y1="0" x2="${x}" y2="${topH}" stroke="rgba(98,113,107,0.28)" stroke-dasharray="3,7" />
-          <circle cx="${x}" cy="${y}" r="3.7" fill="${trace.error ? '#e74c3c' : '#0c6b4f'}" stroke="#ffffff" stroke-width="1.3" />`;
-        if (trace.error) {
-          const crossY = Math.max(14, y - 14);
-          topSVG += `<line x1="${x - 7}" y1="${crossY - 7}" x2="${x + 7}" y2="${crossY + 7}" stroke="#e74c3c" stroke-width="2.4" stroke-linecap="round" />
-            <line x1="${x + 7}" y1="${crossY - 7}" x2="${x - 7}" y2="${crossY + 7}" stroke="#e74c3c" stroke-width="2.4" stroke-linecap="round" />`;
-        }
-      });
-      topSVG += `</svg>`;
+      // --- Правило РУ ---
+      const decisionRuleBlock = buildDecisionRuleBlock(params, u0_val);
 
-      // --- b̂(t) ---
-      let botH = 100;
-      let botSVG = `<svg viewBox="0 0 ${W} ${botH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
-      for (let i = 0; i < zoom.length; i++) {
-        const bitIndex = zoom.start + i;
-        if (SignalData.errors.includes(bitIndex)) botSVG += `<rect x="${i * bitStepX}" y="0" width="${bitStepX}" height="${botH}" fill="rgba(231, 76, 60, 0.25)" />`;
-        botSVG += `<line x1="${i * bitStepX}" y1="0" x2="${i * bitStepX}" y2="${botH}" stroke="rgba(98,113,107,0.18)" stroke-dasharray="3,8" />`;
-      }
-      let mD = "";
-      for (let i = 0; i < zoom.length; i++) {
-        const bitIndex = zoom.start + i;
-        let x1 = i * bitStepX, x2 = (i + 1) * bitStepX;
-        let y = SignalData.b_hat[bitIndex] > 0 ? botH * 0.2 : botH * 0.8;
-        if (i === 0) mD += `M ${x1} ${y} `;
-        else { let prevY = SignalData.b_hat[bitIndex - 1] > 0 ? botH * 0.2 : botH * 0.8; if (prevY !== y) mD += `L ${x1} ${prevY} L ${x1} ${y} `; }
-        mD += `L ${x2} ${y} `;
-      }
-      botSVG += `<line x1="${W}" y1="0" x2="${W}" y2="${botH}" stroke="rgba(98,113,107,0.18)" stroke-dasharray="3,8" />`;
-      botSVG += `<path d="${mD}" stroke="#0c6b4f" stroke-width="2.5" fill="none" stroke-linejoin="round" />`;
-      botSVG += `</svg>`;
-      const scaleNote = `<dl class="visual-scale"><div><dt>Окно решения</dt><dd>биты ${zoom.start + 1}-${zoom.end}</dd></div><div><dt>Стробы</dt><dd>в середине каждого символа</dd></div><div><dt>Сигнал</dt><dd>z(t), масштаб ±${maxZ.toFixed(4)} В</dd></div></dl>`;
-
-      // --- Отклики детектора U_k ---
-      const decisionH = 230;
+      // --- Главный график решения: отклики / порог / стробы / биты ---
+      const decisionH = 260;
       const traces = SignalData.detectorTrace.slice(zoom.start, zoom.end);
       const maxDecision = Math.max(1e-6, ...traces.map((trace) => Math.abs(trace.val)), Math.abs(u0_val), SignalData.Um || 0);
-      const decisionY = (value) => decisionH / 2 - (value / maxDecision) * (decisionH * 0.38);
-      const barW = W / Math.max(1, traces.length) * 0.48;
+      const decisionY = (value) => decisionH / 2 - (value / maxDecision) * (decisionH * 0.32);
+      const stepX = W / Math.max(1, traces.length);
+      const barW = stepX * 0.5;
       let decisionSvg = `<svg viewBox="0 0 ${W} ${decisionH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
       decisionSvg += window.VisualMath.axes(W, decisionH, decisionY(0), "k", "U_k");
-      decisionSvg += `<line x1="0" y1="${decisionY(u0_val)}" x2="${W}" y2="${decisionY(u0_val)}" stroke="#e74c3c" stroke-width="2" stroke-dasharray="6,6" />`;
+      decisionSvg += `<line x1="0" y1="${decisionY(u0_val)}" x2="${W}" y2="${decisionY(u0_val)}" stroke="#e74c3c" stroke-width="2.2" stroke-dasharray="6,6" />`;
+      decisionSvg += `<text x="${W - 10}" y="${decisionY(u0_val) - 6}" fill="#e74c3c" font-family="monospace" font-size="12" text-anchor="end">U0=${u0_val.toFixed(4)} В</text>`;
       traces.forEach((trace, index) => {
-        const x = (index + 0.5) * (W / Math.max(1, traces.length));
+        const x = (index + 0.5) * stepX;
         const y = decisionY(trace.val);
         const y0 = decisionY(0);
-        decisionSvg += `<rect x="${x - barW / 2}" y="${Math.min(y, y0)}" width="${barW}" height="${Math.max(2, Math.abs(y - y0))}" fill="${trace.error ? "#e74c3c" : "#0c6b4f"}" fill-opacity="0.7" />
-          <circle cx="${x}" cy="${y}" r="4" fill="${trace.error ? "#e74c3c" : "#0c6b4f"}" stroke="#ffffff" stroke-width="1.3" />`;
+        const bitLabel = trace.bit > 0 ? "1" : "0";
+        const originalLabel = trace.originalBit > 0 ? "1" : "0";
+        // строб — вертикальная линия
+        decisionSvg += `<line x1="${x}" y1="18" x2="${x}" y2="${decisionH - 34}" stroke="rgba(98,113,107,0.22)" stroke-dasharray="3,6" />`;
+        // столбец отклика
+        decisionSvg += `<rect x="${x - barW / 2}" y="${Math.min(y, y0)}" width="${barW}" height="${Math.max(2, Math.abs(y - y0))}" fill="${trace.error ? "#e74c3c" : "#0c6b4f"}" fill-opacity="0.72" />`;
+        decisionSvg += `<circle cx="${x}" cy="${y}" r="4.2" fill="${trace.error ? "#e74c3c" : "#0c6b4f"}" stroke="#ffffff" stroke-width="1.4" />`;
+        // принятый бит
+        decisionSvg += `<text x="${x}" y="${decisionH - 14}" fill="${trace.error ? "#e74c3c" : "#0c6b4f"}" font-family="monospace" font-size="14" text-anchor="middle" font-weight="bold">b̂=${bitLabel}${trace.error ? ` (${originalLabel})` : ""}</text>`;
+        if (trace.error) {
+          decisionSvg += `<line x1="${x - 7}" y1="${y - 12}" x2="${x + 7}" y2="${y + 2}" stroke="#e74c3c" stroke-width="2.4" stroke-linecap="round" />
+            <line x1="${x + 7}" y1="${y - 12}" x2="${x - 7}" y2="${y + 2}" stroke="#e74c3c" stroke-width="2.4" stroke-linecap="round" />`;
+        }
       });
       decisionSvg += `</svg>`;
 
-      // --- Промежуточный график для ДОФМ-СП: когерентные отклики d_k ---
-      let intermediateLayer = "";
-      if (params.modulation === "DOFM" && params.reception === "SP" && SignalData.coherent_detects) {
-        const intH = 180;
-        const detects = SignalData.coherent_detects.slice(zoom.start, zoom.end);
-        const maxD = Math.max(1e-6, ...detects.map(Math.abs), SignalData.Um || 0);
-        const intY = (value) => intH / 2 - (value / maxD) * (intH * 0.38);
-        let intSvg = `<svg viewBox="0 0 ${W} ${intH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
-        intSvg += window.VisualMath.axes(W, intH, intY(0), "k", "d_k");
-        const dBarW = W / Math.max(1, detects.length) * 0.48;
-        detects.forEach((d, index) => {
-          const x = (index + 0.5) * (W / Math.max(1, detects.length));
-          const y = intY(d);
-          const y0 = intY(0);
-          intSvg += `<rect x="${x - dBarW / 2}" y="${Math.min(y, y0)}" width="${dBarW}" height="${Math.max(2, Math.abs(y - y0))}" fill="#287c9f" fill-opacity="0.6" />
-            <circle cx="${x}" cy="${y}" r="3.5" fill="#287c9f" stroke="#ffffff" stroke-width="1.2" />`;
-        });
-        intSvg += `</svg>`;
-        const intScale = `<dl class="visual-scale"><div><dt>Шаг 1</dt><dd>когерентное детектирование</dd></div><div><dt>d_k</dt><dd>∝ cos(φ_k)</dd></div><div><dt>Шаг 2</dt><dd>U_k = d_k · d_{k-1}</dd></div></dl>`;
-        intermediateLayer = `<div><p class="stage-panel__visuals-header">Отклики d_k перед сравнением полярностей</p>${intScale}${intSvg}</div>`;
-      }
-
-      // --- Промежуточный график для ДЧМ: отклики двух каналов ---
-      if (params.modulation === "DCHM" && SignalData.detector_channel1.length > 0) {
-        const intH = 180;
-        const ch1 = SignalData.detector_channel1.slice(zoom.start, zoom.end);
-        const ch2 = SignalData.detector_channel2.slice(zoom.start, zoom.end);
-        const maxCh = Math.max(1e-6, ...ch1.map(Math.abs), ...ch2.map(Math.abs), SignalData.Um || 0);
-        const intY = (value) => intH / 2 - (value / maxCh) * (intH * 0.38);
-        let intSvg = `<svg viewBox="0 0 ${W} ${intH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
-        intSvg += window.VisualMath.axes(W, intH, intY(0), "k", "U");
-        const dBarW = W / Math.max(1, ch1.length) * 0.36;
-        ch1.forEach((v, index) => {
-          const x = (index + 0.5) * (W / Math.max(1, ch1.length)) - dBarW * 0.55;
-          const y = intY(v); const y0 = intY(0);
-          intSvg += `<rect x="${x}" y="${Math.min(y, y0)}" width="${dBarW}" height="${Math.max(2, Math.abs(y - y0))}" fill="#287c9f" fill-opacity="0.6" />`;
-        });
-        ch2.forEach((v, index) => {
-          const x = (index + 0.5) * (W / Math.max(1, ch2.length)) + dBarW * 0.55;
-          const y = intY(v); const y0 = intY(0);
-          intSvg += `<rect x="${x - dBarW}" y="${Math.min(y, y0)}" width="${dBarW}" height="${Math.max(2, Math.abs(y - y0))}" fill="#0c6b4f" fill-opacity="0.6" />`;
-        });
-        intSvg += `</svg>`;
-        const detTypeName = params.reception === "KO" ? "когерентные отклики" : "огибающие";
-        const intScale = `<dl class="visual-scale"><div><dt>Синий</dt><dd>U₁ (ППФ₂, f₂)</dd></div><div><dt>Зелёный</dt><dd>U₂ (ППФ₁, f₁)</dd></div><div><dt>Тип</dt><dd>${detTypeName}</dd></div></dl>`;
-        intermediateLayer = `<div><p class="stage-panel__visuals-header">Отклики двух частотных каналов U1 и U2</p>${intScale}${intSvg}</div>`;
-      }
+      const errorsInWindow = traces.filter((trace) => trace.error).length;
+      const responseMargin = params.modulation === "DCHM" && SignalData.detector_channel1.length
+        ? Math.min(...SignalData.detector_channel1.slice(zoom.start, zoom.end).map((value, index) => Math.abs((SignalData.detector_channel2[zoom.start + index] || 0) - value)))
+        : Math.min(...traces.map((trace) => Math.abs(trace.val - u0_val)));
+      const decisionScale = `<dl class="visual-scale"><div><dt>Окно</dt><dd>биты ${zoom.start + 1}-${zoom.end}</dd></div><div><dt>${errorsInWindow ? "Ошибки" : "Запас"}</dt><dd>${errorsInWindow ? `${errorsInWindow} в окне` : `min=${Number.isFinite(responseMargin) ? responseMargin.toFixed(4) : "0.0000"}`}</dd></div><div><dt>Стробы</dt><dd>в середине символа</dd></div></dl>`;
 
       // --- ФПВ ---
       const pdfH = 240;
@@ -535,31 +455,14 @@
       });
       planeSvg += `</svg>`;
 
-      const responseMargin = params.modulation === "DCHM" && SignalData.detector_channel1.length
-        ? Math.min(...SignalData.detector_channel1.slice(zoom.start, zoom.end).map((value, index) => Math.abs((SignalData.detector_channel2[zoom.start + index] || 0) - value)))
-        : Math.min(...traces.map((trace) => Math.abs(trace.val - u0_val)));
-      const decisionRule = params.modulation === "DAM"
-        ? "b̂=1, если Uk>U0"
-        : params.modulation === "DCHM"
-          ? "b̂=1, если U2>U1"
-          : params.reception === "SP"
-            ? "b̂=1, если dk·d(k−1)>0"
-            : "b̂=1 при совпадении соседних фаз";
-      const errorsInWindow = traces.filter((trace) => trace.error).length;
-      const decisionScale = `<dl class="visual-scale"><div><dt>Правило</dt><dd>${decisionRule}</dd></div><div><dt>${errorsInWindow ? "Ошибки" : "Запас"}</dt><dd>${errorsInWindow ? `${errorsInWindow} в выбранном окне` : `min=${Number.isFinite(responseMargin) ? responseMargin.toFixed(4) : "0.0000"}`}</dd></div><div><dt>Решение</dt><dd>красным отмечается только ошибочный символ</dd></div></dl>`;
-      const pdfScale = `<dl class="visual-scale"><div><dt>W0</dt><dd>отклик при передаче 0</dd></div><div><dt>W1</dt><dd>отклик при передаче 1</dd></div><div><dt>Порог</dt><dd>U0=${u0_val.toFixed(4)} В</dd></div></dl>`;
+      const pdfScale = `<dl class="visual-scale"><div><dt>\\(W_0\\)</dt><dd>отклик при передаче 0</dd></div><div><dt>\\(W_1\\)</dt><dd>отклик при передаче 1</dd></div><div><dt>Порог</dt><dd>\\(U_0=${u0_val.toFixed(4)}\\) В</dd></div></dl>`;
       const planeScaleNote = `<dl class="visual-scale"><div><dt>Точки</dt><dd>стробы текущего окна</dd></div><div><dt>Вертикаль</dt><dd>граница решения</dd></div><div><dt>Цвет</dt><dd>области 0 и 1</dd></div></dl>`;
-      const pdfDetails = `<details class="visual-step"><summary class="visual-step__summary"><span>Статистика</span><strong>Показать условные ФПВ W0(U) и W1(U)</strong></summary><div class="visual-step__body">${pdfScale}${pdfSvg}</div></details>`;
+      const pdfDetails = `<details class="visual-step"><summary class="visual-step__summary"><span>Статистика</span><strong>Дополнительно: распределения откликов W0(U), W1(U)</strong></summary><div class="visual-step__body">${pdfScale}${pdfSvg}</div></details>`;
       const planeDetails = `<details class="visual-step"><summary class="visual-step__summary"><span>Плоскость</span><strong>Показать плоскость решений по стробам</strong></summary><div class="visual-step__body">${planeScaleNote}${planeSvg}</div></details>`;
 
       return `<div class="stage-panel__visuals-stack">
         ${schemeLayer}
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">z(t) → отклики → стробы → правило решения → b̂_k^μ</p>
-          ${scaleNote}${topSVG}
-          ${intermediateLayer}
-          <p class="stage-panel__visuals-header">Решающий отклик и граница решения</p>${decisionScale}${decisionSvg}
-          <p class="stage-panel__visuals-header">Принятые символы b̂_k^μ</p>${botSVG}
-        </div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">\\(z(t)\\) → отклик → строб → сравнение → \\(\\hat b_k^\\mu\\)</p>${decisionRuleBlock}${decisionScale}${decisionSvg}</div>
         <div class="stage-panel__visuals-layer">${pdfDetails}</div>
         <div class="stage-panel__visuals-layer">${planeDetails}</div>
       </div>`;

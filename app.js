@@ -5,52 +5,58 @@
   // Глобальный объект для обработчиков этапов (заполняется из файлов 01-10)
   window.StageHandlers = window.StageHandlers || {};
 
+  function formula(latex) {
+    const value = String(latex).trim();
+    const math = value.startsWith("\\(") || value.startsWith("\\[") ? value : `\\(${value}\\)`;
+    return `<span class="formula-inline">${math}</span>`;
+  }
+
   const stages = [
-    { id: "source", title: "Источник и первичный преобразователь", group: "source", signal: "c(t) → g(t)" },
-    { id: "tx-filter", title: "Передающий ФНЧ", group: "tx", signal: "g(t) → x(t)" },
-    { id: "sampler", title: "Дискретизатор АЦП", group: "tx", signal: "x(t) → x(kΔt)" },
-    { id: "quantizer", title: "Квантователь АЦП", group: "tx", signal: "x(kΔt) → vₖʲ" },
-    { id: "encoder", title: "Кодер АЦП", group: "tx", signal: "vₖʲ → bₖ<sup>μ</sup>" },
-    { id: "modulator", title: "Модулятор и выход ПДУ", group: "tx", signal: "bₖ<sup>μ</sup> + u<sub>н</sub>(t) → s(t,bₖ<sup>μ</sup>) → S(t)" },
-    { id: "channel", title: "Непрерывный канал связи", group: "channel", signal: "S(t) → z(t)=χS(t)+n(t) (χ=1)" },
-    { id: "detector", title: "Вход ПРУ, детектор и РУ", group: "rx", signal: "z(t) → b̂ₖ<sup>μ</sup>" },
-    { id: "decoder", title: "Декодер и интерполятор ЦАП", group: "rx", signal: "b̂ₖ<sup>μ</sup> → x̂(t)" },
-    { id: "recipient", title: "Приёмный ФНЧ и получатель", group: "rx", signal: "x̂(t) → ĝ(t) → ĉ(t)" },
+    { id: "source", title: "Источник и первичный преобразователь", group: "source", signal: `${formula(String.raw`c(t)`)} → ${formula(String.raw`g(t)`)}` },
+    { id: "tx-filter", title: "Передающий ФНЧ", group: "tx", signal: `${formula(String.raw`g(t)`)} → ${formula(String.raw`x(t)`)}` },
+    { id: "sampler", title: "Дискретизатор АЦП", group: "tx", signal: `${formula(String.raw`x(t)`)} → ${formula(String.raw`x(k\Delta t)`)}` },
+    { id: "quantizer", title: "Квантователь АЦП", group: "tx", signal: `${formula(String.raw`x(k\Delta t)`)} → ${formula(String.raw`v_k^j`)}` },
+    { id: "encoder", title: "Кодер АЦП", group: "tx", signal: `${formula(String.raw`v_k^j`)} → ${formula(String.raw`b_k^\mu`)}` },
+    { id: "modulator", title: "Модулятор и выход ПДУ", group: "tx", signal: `${formula(String.raw`b_k^\mu`)} + ${formula(String.raw`u_{н}(t)`)} → ${formula(String.raw`s(t,b_k^\mu)`)} → ${formula(String.raw`S(t)`)}` },
+    { id: "channel", title: "Непрерывный канал связи", group: "channel", signal: `${formula(String.raw`S(t)`)} → ${formula(String.raw`z(t)=\chi S(t)+n(t)`)}` },
+    { id: "detector", title: "Вход ПРУ, детектор и РУ", group: "rx", signal: `${formula(String.raw`z(t)`)} → ${formula(String.raw`\hat b_k^\mu`)}` },
+    { id: "decoder", title: "Декодер и интерполятор ЦАП", group: "rx", signal: `${formula(String.raw`\hat b_k^\mu`)} → ${formula(String.raw`\hat x(t)`)}` },
+    { id: "recipient", title: "Приёмный ФНЧ и получатель", group: "rx", signal: `${formula(String.raw`\hat x(t)`)} → ${formula(String.raw`\hat g(t)`)} → ${formula(String.raw`\hat c(t)`)}` },
   ];
 
   const stageGuides = {
     source: {
-      input: "исходное сообщение c(t)",
-      action: "превращаем сообщение в электрический случайный процесс g(t)",
-      output: "первичный сигнал g(t)",
+      input: `исходное сообщение ${formula(String.raw`c(t)`)}`,
+      action: `превращаем сообщение в электрический случайный процесс ${formula(String.raw`g(t)`)}`,
+      output: `первичный сигнал ${formula(String.raw`g(t)`)}`,
       points: [
         "Сначала смотри временную реализацию: это один возможный вид сообщения.",
-        "Затем связывай её с Bc(τ): корреляция показывает, как быстро сигнал забывает прошлые значения.",
-        "После этого переходи к Gg(f): спектр объясняет, какую полосу должен пропустить тракт.",
+        `Затем связывай её с ${formula(String.raw`B_c(\tau)`)}: корреляция показывает, как быстро сигнал забывает прошлые значения.`,
+        `После этого переходи к ${formula(String.raw`G_g(f)`)}: спектр объясняет, какую полосу должен пропустить тракт.`,
       ],
     },
     "tx-filter": {
-      input: "первичный сигнал g(t)",
+      input: `первичный сигнал ${formula(String.raw`g(t)`)}`,
       action: "идеальный ФНЧ оставляет полезную полосу и срезает спектральный хвост",
-      output: "ограниченный по спектру сигнал x(t)",
+      output: `ограниченный по спектру сигнал ${formula(String.raw`x(t)`)}`,
       points: [
         "Во времени фильтр выглядит как сглаживание резких изменений.",
-        "В частотной области видно главное: всё за пределами Δfg превращается в ошибку фильтрации.",
+        `В частотной области видно главное: всё за пределами ${formula(String.raw`\Delta f_g`)} превращается в ошибку фильтрации.`,
       ],
     },
     sampler: {
-      input: "непрерывный сигнал x(t)",
-      action: "берём отсчёты через Δt по теореме Котельникова",
-      output: "последовательность x(k·Δt)",
+      input: `непрерывный сигнал ${formula(String.raw`x(t)`)}`,
+      action: `берём отсчёты через ${formula(String.raw`\Delta t`)} по теореме Котельникова`,
+      output: `последовательность ${formula(String.raw`x(k\Delta t)`)}`,
       points: [
-        "Чем больше α, тем плотнее стоят отсчёты.",
-        "Этот же шаг Δt дальше задаёт длительность ступеней ЦАП, поэтому дискретизация связывает начало и конец тракта.",
+        `Чем больше ${formula(String.raw`\alpha`)}, тем плотнее стоят отсчёты.`,
+        `Этот же шаг ${formula(String.raw`\Delta t`)} дальше задаёт длительность ступеней ЦАП, поэтому дискретизация связывает начало и конец тракта.`,
       ],
     },
     quantizer: {
-      input: "отсчёты x(k·Δt)",
+      input: `отсчёты ${formula(String.raw`x(k\Delta t)`)}`,
       action: "заменяем каждый отсчёт ближайшим разрешённым уровнем",
-      output: "уровни квантования vₖʲ",
+      output: `уровни квантования ${formula(String.raw`v_k^j`)}`,
       points: [
         "Первый график показывает потерю точности на каждом отсчёте.",
         "Лесенка квантователя объясняет правило замены амплитуды уровнем.",
@@ -58,9 +64,9 @@
       ],
     },
     encoder: {
-      input: "уровни vₖʲ",
-      action: "каждый уровень заменяется μ-битной кодовой комбинацией рассчитанной разрядности",
-      output: "цифровой поток bₖ<sup>μ</sup>",
+      input: `уровни ${formula(String.raw`v_k^j`)}`,
+      action: `каждый уровень заменяется ${formula(String.raw`\mu`)}-битной кодовой комбинацией рассчитанной разрядности`,
+      output: `цифровой поток ${formula(String.raw`b_k^\mu`)}`,
       points: [
         "Сначала сопоставь уровень и кодовое слово.",
         "Потом смотри меандр b(t): именно он управляет радиомодулятором.",
@@ -68,9 +74,9 @@
       ],
     },
     modulator: {
-      input: "цифровой поток bₖ<sup>μ</sup> и несущая u<sub>н</sub>(t)",
+      input: `цифровой поток ${formula(String.raw`b_k^\mu`)} и несущая ${formula(String.raw`u_{н}(t)`)}`,
       action: "код управляет одним свойством несущей",
-      output: "радиосигнал S(t)",
+      output: `радиосигнал ${formula(String.raw`S(t)`)}`,
       points: [
         "В ДАМ меняется амплитуда: бит 0 гасит или ослабляет посылку, бит 1 включает её.",
         "В ДЧМ меняется частота: разные биты передаются разными несущими f1 и f2.",
@@ -78,18 +84,18 @@
       ],
     },
     channel: {
-      input: "передаваемый сигнал S(t)",
+      input: `передаваемый сигнал ${formula(String.raw`S(t)`)}`,
       action: "к сигналу добавляется аддитивный гауссовский шум",
-      output: "принятая смесь z(t)",
+      output: `принятая смесь ${formula(String.raw`z(t)`)}`,
       points: [
         "Сравни три раскрываемых фрагмента сверху вниз: чистый сигнал, отдельный шум, сумма на входе приёмника.",
-        "N0 меняет мощность шума, а h² задаёт требуемую мощность сигнала для выбранной полосы.",
+        `${formula(String.raw`N_0`)} меняет мощность шума, а ${formula(String.raw`h^2`)} задаёт требуемую мощность сигнала для выбранной полосы.`,
       ],
     },
     detector: {
-      input: "смесь z(t)",
+      input: `смесь ${formula(String.raw`z(t)`)}`,
       action: "приёмник выбирает бит по правилу, зависящему от модуляции и способа приёма",
-      output: "оценка битов b̂ₖ<sup>μ</sup>",
+      output: `оценка битов ${formula(String.raw`\hat b_k^\mu`)}`,
       points: [
         "Для ДАМ важен порог амплитуды.",
         "Для ДЧМ сравнивается энергия в двух частотных ветках.",
@@ -97,22 +103,65 @@
       ],
     },
     decoder: {
-      input: "принятые биты b̂ₖ<sup>μ</sup>",
+      input: `принятые биты ${formula(String.raw`\hat b_k^\mu`)}`,
       action: "кодовые слова снова переводятся в амплитудные уровни",
-      output: "восстановленные уровни x̂(t)",
+      output: `восстановленные уровни ${formula(String.raw`\hat v_k^j`)}`,
       points: [
         "Если бит ошибся, кодовое слово может попасть в другой уровень.",
         "Красная область показывает уже не радиошум, а шум передачи после декодирования.",
       ],
     },
     recipient: {
-      input: "ступенчатый сигнал x̂(t)",
+      input: `ступенчатый сигнал ${formula(String.raw`\hat x(t)`)}`,
       action: "интерполяция и приёмный ФНЧ сглаживают уровни",
-      output: "оценка исходного сообщения ĉ(t)",
+      output: `оценка исходного сообщения ${formula(String.raw`\hat c(t)`)}`,
       points: [
         "Сравни исходную кривую и восстановленную: это итог всей цепочки.",
-        "Финальная δ²Σ собирает три причины потерь: фильтрацию, квантование и ошибки передачи.",
+        `Финальная ${formula(String.raw`\delta_\Sigma^2`)} собирает три причины потерь: фильтрацию, квантование и ошибки передачи.`,
       ],
+    },
+  };
+
+  const stageBridges = {
+    source: {
+      chain: formula(String.raw`B_c(\tau)\to G_g(f)\to\Delta f_g`),
+      text: `Корреляционная функция объясняет форму спектра, а спектр задаёт рабочую полосу ${formula(String.raw`\Delta f_g`)}.`,
+    },
+    "tx-filter": {
+      chain: formula(String.raw`\Delta f_g\to f_{ср}\to\xi_ф^2`),
+      text: `ФНЧ пропускает полосу ${formula(String.raw`\Delta f_g`)} и отсекает спектральный хвост; отсечённая энергия становится ошибкой фильтрации.`,
+    },
+    sampler: {
+      chain: formula(String.raw`\Delta f_g,\alpha\to f_д\to\Delta t`),
+      text: `Чем шире спектр и больше запас ${formula(String.raw`\alpha`)}, тем чаще нужно брать отсчёты.`,
+    },
+    quantizer: {
+      chain: formula(String.raw`W_g(x)\to p_j\to\Delta U,\mu\to\xi_{кв}^2`),
+      text: `Распределение амплитуд объясняет вероятности уровней, а шаг ${formula(String.raw`\Delta U`)} определяет шум квантования.`,
+    },
+    encoder: {
+      chain: formula(String.raw`\mu\to\tau_{сим}\to\Delta f_ц\to\Delta f_s`),
+      text: `Чем больше бит в кодовом слове, тем короче битовый символ и шире цифровой/модулированный спектр.`,
+    },
+    modulator: {
+      chain: formula(String.raw`\mu\to\tau_{сим}\to\Delta f_ц\to\Delta f_s`),
+      text: `Длительность битового символа задаёт цифровую полосу, а вид модуляции превращает её в ${formula(String.raw`\Delta f_s`)}.`,
+    },
+    channel: {
+      chain: formula(String.raw`\Delta f_s\to P_ш=N_0\Delta f_s\to P_s=h^2P_ш\to U_m`),
+      text: `Полоса сигнала определяет, сколько шума попадёт в приёмник, а через ${formula(String.raw`h^2`)} задаётся требуемая мощность сигнала для выбранной полосы.`,
+    },
+    detector: {
+      chain: formula(String.raw`z(t)\to\text{отклик}\to U_k\to\hat b_k^\mu`),
+      text: `Приёмник берёт отсчёт отклика и сравнивает его с порогом или откликом другого канала.`,
+    },
+    decoder: {
+      chain: formula(String.raw`\hat b_k^\mu\to\hat v_k^j\to\xi_п^2\to\delta_\Sigma^2`),
+      text: `Ошибочный бит превращается в неправильный уровень, который входит в шум передачи и итоговую ошибку.`,
+    },
+    recipient: {
+      chain: formula(String.raw`\hat b_k^\mu\to\hat v_k^j\to\xi_п^2\to\delta_\Sigma^2`),
+      text: `Ошибки восстановленных уровней вместе с фильтрацией и квантованием образуют итоговую ошибку.`,
     },
   };
 
@@ -143,32 +192,32 @@
   const SignalData = window.SignalData;
 
   const modulationOptions = {
-    DAM: { title: "ДАМ · дискретная амплитудная модуляция", description: "Двоичный код управляет амплитудой гармонической несущей.", primaryFrequencyLabel: "f<sub>0</sub>", primaryFrequencyDescription: "Несущая частота, МГц", receptions: [["KO", "КО · когерентный приём"], ["NO", "НО · некогерентный приём"]] },
-    DCHM: { title: "ДЧМ · дискретная частотная модуляция", description: "Двоичный код переключает несущую между частотами f₁ и f₂.", primaryFrequencyLabel: "f<sub>2</sub>", primaryFrequencyDescription: "Нижняя несущая частота, МГц", receptions: [["KO", "КО · когерентный приём"], ["NO", "НО · некогерентный приём"]] },
-    DOFM: { title: "ДОФМ · дискретная относительная фазовая модуляция", description: "Двоичный код управляет относительным изменением фазы несущей.", primaryFrequencyLabel: "f<sub>0</sub>", primaryFrequencyDescription: "Несущая частота, МГц", receptions: [["SF", "СФ · сравнение фаз"], ["SP", "СП · сравнение полярностей"]] },
+    DAM: { title: "ДАМ · дискретная амплитудная модуляция", description: "Двоичный код управляет амплитудой гармонической несущей.", primaryFrequencyLabel: formula(String.raw`f_0`), primaryFrequencyDescription: "Несущая частота, МГц", receptions: [["KO", "КО · когерентный приём"], ["NO", "НО · некогерентный приём"]] },
+    DCHM: { title: "ДЧМ · дискретная частотная модуляция", description: `Двоичный код переключает несущую между частотами ${formula(String.raw`f_1`)} и ${formula(String.raw`f_2`)}.`, primaryFrequencyLabel: formula(String.raw`f_2`), primaryFrequencyDescription: "Нижняя несущая частота, МГц", receptions: [["KO", "КО · когерентный приём"], ["NO", "НО · некогерентный приём"]] },
+    DOFM: { title: "ДОФМ · дискретная относительная фазовая модуляция", description: "Двоичный код управляет относительным изменением фазы несущей.", primaryFrequencyLabel: formula(String.raw`f_0`), primaryFrequencyDescription: "Несущая частота, МГц", receptions: [["SF", "СФ · сравнение фаз"], ["SP", "СП · сравнение полярностей"]] },
   };
 
   // === Единое описание сигналов структурной схемы методички ===
   // Используется только для одинаковых обозначений, кратких названий
   // и классификации. Расчёты и массивы остаются в SignalData.
   const SIGNAL_META = {
-    c:         { symbol: "c(t)",          name: "Сообщение источника",                       type: "Непрерывное сообщение" },
-    g:         { symbol: "g(t)",          name: "Первичный электрический сигнал сообщения",  type: "Непрерывный случайный сигнал" },
-    x:         { symbol: "x(t)",          name: "Сигнал сообщения с ограниченным спектром",  type: "Непрерывный по времени и уровню" },
-    sampled:   { symbol: "x(kΔt)",        name: "Дискретизированный сигнал сообщения",       type: "Дискретный по времени, непрерывный по уровню" },
-    quantized: { symbol: "vₖʲ",           name: "Квантованное значение сигнала",             type: "Дискретный по времени и уровню" },
-    encoded:   { symbol: "bₖ<sup>μ</sup>", name: "μ-разрядная кодовая комбинация",           type: "Цифровой сигнал" },
-    carrier:   { symbol: "u<sub>н</sub>(t)", name: "Несущее гармоническое колебание",         type: "Непрерывное периодическое колебание" },
-    modulated: { symbol: "s(t,bₖ<sup>μ</sup>)", name: "Несущее колебание, модулированное сообщением", type: "Непрерывный физический сигнал" },
-    transmitted:{ symbol: "S(t)",         name: "Сигнал, передаваемый по линии связи",       type: "Непрерывный физический сигнал" },
-    noise:     { symbol: "n(t)",          name: "Помеха в линии связи",                      type: "Непрерывный случайный процесс" },
-    received:  { symbol: "z(t)",          name: "Сигнал на входе приёмника",                 type: "Непрерывный случайный сигнал" },
-    detected:  { symbol: "ŝ(t,bₖ<sup>μ</sup>)", name: "Принятый модулированный сигнал на выходе входного устройства ПРУ", type: "Непрерывный сигнал" },
-    b_hat:     { symbol: "b̂ₖ<sup>μ</sup>", name: "Принятая кодовая комбинация",              type: "Цифровой сигнал" },
-    v_hat:     { symbol: "v̂ₖʲ",          name: "Восстановленный квантованный уровень",      type: "Дискретный по времени и уровню" },
-    x_hat:     { symbol: "x̂(t)",          name: "Восстановленный сигнал после интерполяции", type: "Непрерывный по времени, дискретный по уровню" },
-    g_hat:     { symbol: "ĝ(t)",          name: "Восстановленный электрический сигнал сообщения", type: "Непрерывный по времени и уровню" },
-    c_hat:     { symbol: "ĉ(t)",          name: "Принятое сообщение после выходного преобразователя", type: "Непрерывное сообщение" },
+    c:         { symbol: formula(String.raw`c(t)`), name: "Сообщение источника", type: "Непрерывное сообщение" },
+    g:         { symbol: formula(String.raw`g(t)`), name: "Первичный электрический сигнал сообщения", type: "Непрерывный случайный сигнал" },
+    x:         { symbol: formula(String.raw`x(t)`), name: "Сигнал сообщения с ограниченным спектром", type: "Непрерывный по времени и уровню" },
+    sampled:   { symbol: formula(String.raw`x(k\Delta t)`), name: "Дискретизированный сигнал сообщения", type: "Дискретный по времени, непрерывный по уровню" },
+    quantized: { symbol: formula(String.raw`v_k^j`), name: "Квантованное значение сигнала", type: "Дискретный по времени и уровню" },
+    encoded:   { symbol: formula(String.raw`b_k^\mu`), name: "μ-разрядная кодовая комбинация", type: "Цифровой сигнал" },
+    carrier:   { symbol: formula(String.raw`u_{н}(t)`), name: "Несущее гармоническое колебание", type: "Непрерывное периодическое колебание" },
+    modulated: { symbol: formula(String.raw`s(t,b_k^\mu)`), name: "Несущее колебание, модулированное сообщением", type: "Непрерывный физический сигнал" },
+    transmitted:{ symbol: formula(String.raw`S(t)`), name: "Сигнал, передаваемый по линии связи", type: "Непрерывный физический сигнал" },
+    noise:     { symbol: formula(String.raw`n(t)`), name: "Помеха в линии связи", type: "Непрерывный случайный процесс" },
+    received:  { symbol: formula(String.raw`z(t)`), name: "Сигнал на входе приёмника", type: "Непрерывный случайный сигнал" },
+    detected:  { symbol: formula(String.raw`\hat s(t,b_k^\mu)`), name: "Принятый модулированный сигнал на выходе входного устройства ПРУ", type: "Непрерывный сигнал" },
+    b_hat:     { symbol: formula(String.raw`\hat b_k^\mu`), name: "Принятая кодовая комбинация", type: "Цифровой сигнал" },
+    v_hat:     { symbol: formula(String.raw`\hat v_k^j`), name: "Восстановленный квантованный уровень", type: "Дискретный по времени и уровню" },
+    x_hat:     { symbol: formula(String.raw`\hat x(t)`), name: "Восстановленный сигнал после интерполяции", type: "Непрерывный по времени, дискретный по уровню" },
+    g_hat:     { symbol: formula(String.raw`\hat g(t)`), name: "Восстановленный электрический сигнал сообщения", type: "Непрерывный по времени и уровню" },
+    c_hat:     { symbol: formula(String.raw`\hat c(t)`), name: "Принятое сообщение после выходного преобразователя", type: "Непрерывное сообщение" },
   };
 
   // === Граф зависимостей параметров (только для подсветки и пояснения) ===
@@ -211,7 +260,7 @@
     "tx-filter": {
       inputSignals: ["g"], outputSignals: ["x"],
       dependsOn: ["beta", "signalBandwidth"], affects: ["filterError"],
-      signalChange: "Форма сигнала сохраняется, но высокочастотные составляющие спектра за пределами Δfg подавляются.",
+      signalChange: `Форма сигнала сохраняется, но составляющие за пределами ${formula(String.raw`\Delta f_g`)} подавляются.`,
     },
     sampler: {
       inputSignals: ["x"], outputSignals: ["sampled"],
@@ -226,35 +275,35 @@
     encoder: {
       inputSignals: ["quantized"], outputSignals: ["encoded"],
       dependsOn: ["mu"], affects: ["bitDuration", "digitalBandwidth"],
-      signalChange: "Номер уровня превращается в μ-битное двоичное слово. Сигнал становится цифровым.",
+      signalChange: `Номер уровня превращается в ${formula(String.raw`\mu`)}-битное двоичное слово. Сигнал становится цифровым.`,
     },
     modulator: {
       inputSignals: ["encoded", "carrier"], outputSignals: ["modulated", "transmitted"],
       dependsOn: ["digitalBandwidth", "signalNoiseRatio"], affects: ["modulatedBandwidth", "Um"],
       signalChange: "Цифровой код управляет одним из параметров несущей. Форма зависит от вида модуляции.",
       miniTract: [
-        { node: "bₖ<sup>μ</sup>", label: "Модулятор", out: "s(t,bₖ<sup>μ</sup>)" },
-        { node: null, label: "Выход ПДУ", out: "S(t)" },
+        { node: SIGNAL_META.encoded.symbol, label: "Модулятор", out: SIGNAL_META.modulated.symbol },
+        { node: null, label: "Выход ПДУ", out: SIGNAL_META.transmitted.symbol },
       ],
-      extraInput: "u<sub>н</sub>(t)",
+      extraInput: SIGNAL_META.carrier.symbol,
     },
     channel: {
       inputSignals: ["transmitted"], outputSignals: ["received"],
       dependsOn: ["modulatedBandwidth", "noiseDensity"], affects: ["noisePower", "signalPower"],
-      signalChange: "Сигнал проходит через линию связи и смешивается с аддитивным гауссовским шумом. В расчётах принято χ=1.",
+      signalChange: `Сигнал смешивается с аддитивным гауссовским шумом; принято ${formula(String.raw`\chi=1`)}.`,
       miniTract: [
-        { node: "S(t)", label: "Ослабление χ", out: "χS(t)" },
-        { node: null, label: "+ n(t)", out: "z(t)" },
+        { node: SIGNAL_META.transmitted.symbol, label: "Ослабление", out: formula(String.raw`\chi S(t)`) },
+        { node: null, label: "+ шум", out: SIGNAL_META.received.symbol },
       ],
-      extraInput: "n(t)",
+      extraInput: SIGNAL_META.noise.symbol,
     },
     detector: {
       inputSignals: ["received"], outputSignals: ["b_hat"],
       dependsOn: ["signalPower", "noisePower", "signalNoiseRatio"], affects: ["errorProbability"],
       signalChange: "Детектор формирует отклик, из которого решающее устройство восстанавливает биты.",
       miniTract: [
-        { node: "z(t)", label: "Вход ПРУ", out: "ŝ(t,bₖ<sup>μ</sup>)" },
-        { node: null, label: "Детектор → РУ", out: "b̂ₖ<sup>μ</sup>" },
+        { node: SIGNAL_META.received.symbol, label: "Вход ПРУ", out: SIGNAL_META.detected.symbol },
+        { node: null, label: "Детектор и РУ", out: SIGNAL_META.b_hat.symbol },
       ],
     },
     decoder: {
@@ -262,8 +311,8 @@
       dependsOn: ["mu", "errorProbability"], affects: ["transmissionNoise"],
       signalChange: "Кодовые слова переводятся обратно в уровни, затем интерполятор формирует ступенчатый сигнал.",
       miniTract: [
-        { node: "b̂ₖ<sup>μ</sup>", label: "Декодер", out: "v̂ₖʲ" },
-        { node: null, label: "Интерполятор", out: "x̂(t)" },
+        { node: SIGNAL_META.b_hat.symbol, label: "Декодер", out: SIGNAL_META.v_hat.symbol },
+        { node: null, label: "Интерполятор", out: SIGNAL_META.x_hat.symbol },
       ],
     },
     recipient: {
@@ -271,21 +320,21 @@
       dependsOn: ["filterError", "quantizationNoise", "transmissionNoise"], affects: ["totalError"],
       signalChange: "Ступенчатый сигнал сглаживается приёмным ФНЧ, образуя непрерывную оценку сообщения.",
       miniTract: [
-        { node: "x̂(t)", label: "Приёмный ФНЧ", out: "ĝ(t)" },
-        { node: null, label: "Выходной преобразователь", out: "ĉ(t)" },
+        { node: SIGNAL_META.x_hat.symbol, label: "Приёмный ФНЧ", out: SIGNAL_META.g_hat.symbol },
+        { node: null, label: "Выходной преобразователь", out: SIGNAL_META.c_hat.symbol },
       ],
     },
   };
 
   // Описание изменения параметров для подсветки (краткие физические пояснения)
   const PARAM_CHANGE_NOTES = {
-    Pg: "Изменение мощности сигнала пересчитывает σg, динамический диапазон и шаг квантования.",
-    beta: "Изменение β меняет ширину спектра Δfg, что влияет на ошибку фильтрации и частоту дискретизации.",
-    signalBandwidth: "Полоса сигнала определяет ошибку фильтрации и частоту дискретизации.",
-    samplingIncrease: "Изменение α меняет частоту дискретизации, интервал Δt, поправку η и разрядность μ.",
-    signalNoiseRatio: "Изменение h² пересчитывает мощность сигнала, амплитуду и вероятность ошибки.",
-    noiseDensity: "Изменение N0 меняет мощность шума в полосе канала.",
-    mu: "Разрядность определяет число уровней, длительность символа и ширину цифрового спектра.",
+    Pg: `Изменение мощности сигнала пересчитывает ${formula(String.raw`\sigma_g`)}, динамический диапазон и шаг квантования.`,
+    beta: `Изменение ${formula(String.raw`\beta`)} меняет ширину спектра ${formula(String.raw`\Delta f_g`)}, что влияет на ошибку фильтрации и частоту дискретизации.`,
+    signalBandwidth: `Полоса сигнала ${formula(String.raw`\Delta f_g`)} определяет ошибку фильтрации и частоту дискретизации.`,
+    samplingIncrease: `Изменение ${formula(String.raw`\alpha`)} меняет частоту дискретизации, интервал ${formula(String.raw`\Delta t`)}, поправку ${formula(String.raw`\eta`)} и разрядность ${formula(String.raw`\mu`)}.`,
+    signalNoiseRatio: `Изменение ${formula(String.raw`h^2`)} пересчитывает мощность сигнала, амплитуду и вероятность ошибки.`,
+    noiseDensity: `Изменение ${formula(String.raw`N_0`)} меняет мощность шума в полосе канала.`,
+    mu: `Разрядность ${formula(String.raw`\mu`)} определяет число уровней, длительность символа и ширину цифрового спектра.`,
   };
 
   const correlationGroups = {
@@ -364,21 +413,21 @@
   };
 
   const parameterLabels = {
-    signalPower: ["P<sub>g</sub>", "В²"], beta: ["β", "мс⁻¹"], signalBandwidth: ["Δf<sub>g</sub>", ""],
-    samplingIncrease: ["α", ""], noiseDensity: ["N<sub>0</sub>", "мВт/Гц"], signalNoiseRatio: ["h<sup>2</sup>", ""],
-    acceptableError: ["δ<sub>доп</sub><sup>2</sup>", ""],
+    signalPower: [formula(String.raw`P_g`), "В²"], beta: [formula(String.raw`\beta`), "мс⁻¹"], signalBandwidth: [formula(String.raw`\Delta f_g`), ""],
+    samplingIncrease: [formula(String.raw`\alpha`), ""], noiseDensity: [formula(String.raw`N_0`), "мВт/Гц"], signalNoiseRatio: [formula(String.raw`h^2`), ""],
+    acceptableError: [formula(String.raw`\delta_{доп}^2`), ""],
   };
 
   const stageControlMeta = {
-    signalPower: { label: "P_g", min: 0.1, max: 6, step: 0.1, unit: "В²" },
-    beta: { label: "β", min: 1, max: 40, step: 0.1, unit: "мс⁻¹" },
-    bandwidthFactor: { label: "k", min: 0.5, max: 5, step: 0.1, unit: "" },
-    samplingIncrease: { label: "α", min: 1, max: 5, step: 0.1, unit: "" },
-    primaryFrequency: { label: "f0/f2", min: 40, max: 120, step: 0.1, unit: "МГц" },
-    secondaryFrequency: { label: "f1", min: 40, max: 130, step: 0.1, unit: "МГц" },
-    noiseDensity: { label: "N0", min: 0.00001, max: 0.001, step: 0.00001, unit: "" },
-    signalNoiseRatio: { label: "h²", min: 1, max: 25, step: 0.1, unit: "" },
-    acceptableError: { label: "δ²доп", min: 0.01, max: 1, step: 0.01, unit: "" },
+    signalPower: { label: formula(String.raw`P_g`), min: 0.1, max: 6, step: 0.1, unit: "В²" },
+    beta: { label: formula(String.raw`\beta`), min: 1, max: 40, step: 0.1, unit: "мс⁻¹" },
+    bandwidthFactor: { label: formula(String.raw`k`), min: 0.5, max: 5, step: 0.1, unit: "" },
+    samplingIncrease: { label: formula(String.raw`\alpha`), min: 1, max: 5, step: 0.1, unit: "" },
+    primaryFrequency: { label: formula(String.raw`f_0/f_2`), min: 40, max: 120, step: 0.1, unit: "МГц" },
+    secondaryFrequency: { label: formula(String.raw`f_1`), min: 40, max: 130, step: 0.1, unit: "МГц" },
+    noiseDensity: { label: formula(String.raw`N_0`), min: 0.00001, max: 0.001, step: 0.00001, unit: "" },
+    signalNoiseRatio: { label: formula(String.raw`h^2`), min: 1, max: 25, step: 0.1, unit: "" },
+    acceptableError: { label: formula(String.raw`\delta_{доп}^2`), min: 0.01, max: 1, step: 0.01, unit: "" },
   };
 
   const stageControlMap = {
@@ -413,8 +462,8 @@
   function getModulationLearningNote(params) {
     const notes = {
       DAM: "Сейчас выбран ДАМ: форма должна менять амплитуду несущей, а приёмник работает по амплитудному правилу.",
-      DCHM: "Сейчас выбран ДЧМ: форма использует две частоты f2 и f1, а приёмник сравнивает частотные ветви.",
-      DOFM: "Сейчас выбран ДОФМ: форма использует одну несущую f0, а информация переносится относительным изменением фазы.",
+      DCHM: `Сейчас выбран ДЧМ: используются частоты ${formula(String.raw`f_1`)} и ${formula(String.raw`f_2`)}, а приёмник сравнивает две ветви.`,
+      DOFM: `Сейчас выбран ДОФМ: используется несущая ${formula(String.raw`f_0`)}, а информация переносится относительным изменением фазы.`,
     };
     return notes[params.modulation] || "";
   }
@@ -471,18 +520,18 @@
     const affects = meta.affects || [];
     if (!dependsOn.length && !affects.length) return "";
     const paramLabels = {
-      Pg: "P<sub>g</sub>", beta: "β", signalBandwidth: "Δf<sub>g</sub>",
-      samplingIncrease: "α", eta: "η", sigmaG: "σ<sub>g</sub>", dfg: "Δf<sub>g</sub>",
-      filterError: "ξ<sub>ф</sub>²", samplingFrequency: "f<sub>д</sub>",
-      samplingInterval: "Δt", conditionalStep: "Δu<sub>усл</sub>",
-      mu: "μ", levelCount: "L", bitDuration: "τ<sub>сим</sub>",
-      digitalBandwidth: "Δf<sub>ц</sub>", quantizationNoise: "ξ<sub>кв</sub>²",
-      modulatedBandwidth: "Δf<sub>s</sub>", noisePower: "P<sub>ш</sub>",
-      signalPower: "P<sub>s</sub>", Um: "U<sub>m</sub>",
-      errorProbability: "p<sub>ош</sub>", transmissionNoise: "ξ<sub>п</sub>²",
-      totalError: "δ<sub>Σ</sub>²", channelCapacity: "C",
-      noiseDensity: "N<sub>0</sub>", signalNoiseRatio: "h²",
-      Dg: "D<sub>g</sub>", deltaU1: "Δu<sub>1</sub>",
+      Pg: formula(String.raw`P_g`), beta: formula(String.raw`\beta`), signalBandwidth: formula(String.raw`\Delta f_g`),
+      samplingIncrease: formula(String.raw`\alpha`), eta: formula(String.raw`\eta`), sigmaG: formula(String.raw`\sigma_g`), dfg: formula(String.raw`\Delta f_g`),
+      filterError: formula(String.raw`\xi_ф^2`), samplingFrequency: formula(String.raw`f_д`),
+      samplingInterval: formula(String.raw`\Delta t`), conditionalStep: formula(String.raw`\Delta u_{усл}`),
+      mu: formula(String.raw`\mu`), levelCount: formula(String.raw`L`), bitDuration: formula(String.raw`\tau_{сим}`),
+      digitalBandwidth: formula(String.raw`\Delta f_ц`), quantizationNoise: formula(String.raw`\xi_{кв}^2`),
+      modulatedBandwidth: formula(String.raw`\Delta f_s`), noisePower: formula(String.raw`P_ш`),
+      signalPower: formula(String.raw`P_s`), Um: formula(String.raw`U_m`),
+      errorProbability: formula(String.raw`p_{ош}`), transmissionNoise: formula(String.raw`\xi_п^2`),
+      totalError: formula(String.raw`\delta_\Sigma^2`), channelCapacity: formula(String.raw`C`),
+      noiseDensity: formula(String.raw`N_0`), signalNoiseRatio: formula(String.raw`h^2`),
+      Dg: formula(String.raw`D_g`), deltaU1: formula(String.raw`\Delta u_1`),
     };
     const formatParam = (p) => paramLabels[p] || escapeHtml(p);
     let html = `<div class="dependencies-block">`;
@@ -508,8 +557,18 @@
     if (!guide) return "";
     const modulationNote = ["modulator", "detector"].includes(stage.id) ? getModulationLearningNote(params) : "";
     return `<div class="stage-panel__content stage-panel__guide" data-group="${stage.group}">
-      <p class="stage-panel__action"><strong>Что изменилось:</strong> ${escapeHtml(guide.action)}</p>
-      ${modulationNote ? `<p class="stage-panel__guide-note">${escapeHtml(modulationNote)}</p>` : ""}
+      <p class="stage-panel__action"><strong>Что изменилось:</strong> ${guide.action}</p>
+      ${modulationNote ? `<p class="stage-panel__guide-note">${modulationNote}</p>` : ""}
+    </div>`;
+  }
+
+  function renderCausalBridge(stageId) {
+    const bridge = stageBridges[stageId];
+    if (!bridge) return "";
+    return `<div class="stage-panel__content stage-causal-bridge">
+      <strong>Этот график нужен дальше, потому что:</strong>
+      <span class="stage-causal-bridge__chain">${bridge.chain}</span>
+      <span>${bridge.text}</span>
     </div>`;
   }
 
@@ -633,15 +692,17 @@
     // Формируем HTML
     let html = `<div class="stage-panel__left">`;
     html += `<div class="stage-panel__content">`;
-    html += `<p class="eyebrow">Этап обработки</p><h2>${stage.title}</h2><span class="stage-panel__signal">${stage.signal}</span>`;
+    html += `<p class="eyebrow">Этап обработки</p><h2>${stage.title}</h2>`;
     // Мини-тракт для объединённых карточек
     const miniTractHtml = renderMiniTract(stage.id);
     if (miniTractHtml) html += miniTractHtml;
+    else html += `<span class="stage-panel__signal">${stage.signal}</span>`;
     html += `</div>`;
     // Блок «Вход → Выход» с классификацией сигналов
     const signalFlowHtml = renderSignalFlowBlock(stage.id);
     if (signalFlowHtml) html += `<div class="stage-panel__content">${signalFlowHtml}</div>`;
     html += renderLearningGuide(stage, params);
+    html += renderCausalBridge(stage.id);
     html += renderStageControls(stage.id, params);
     // Блок зависимостей
     const depsHtml = renderDependenciesBlock(stage.id);
@@ -698,7 +759,9 @@
     clearTimeout(mathRenderTimeout);
     mathRenderTimeout = setTimeout(() => {
       if (!window.MathJax || typeof window.MathJax.typesetPromise !== "function") return;
-      const elements = [correlationPreview, summaryCorrelationFormula, summaryBandwidthFormula].filter(Boolean);
+      const elements = [correlationPreview, summaryCorrelationFormula, summaryBandwidthFormula, summary].filter(Boolean);
+      if (route) elements.push(route);
+      if (parametersForm) elements.push(parametersForm);
       // Рендерим все формулы внутри панели этапа
       const panelContent = document.querySelector('.stage-panel');
       if (panelContent) {
@@ -809,8 +872,8 @@
     summary.replaceChildren(
       createSummaryItem("Режим", values.variantPreset === "custom" ? "Ручной ввод" : `Вариант ${values.variantPreset}`),
       ...Object.entries(parameterLabels).map(([key, [label, unit]]) => createSummaryItem(label, values[key], unit)),
-      createSummaryItem(values.modulation === "DCHM" ? "f<sub>2</sub>" : "f<sub>0</sub>", values.primaryFrequency, "МГц"),
-      ...(values.modulation === "DCHM" ? [createSummaryItem("f<sub>1</sub>", values.secondaryFrequency, "МГц")] : []),
+      createSummaryItem(values.modulation === "DCHM" ? formula(String.raw`f_2`) : formula(String.raw`f_0`), values.primaryFrequency, "МГц"),
+      ...(values.modulation === "DCHM" ? [createSummaryItem(formula(String.raw`f_1`), values.secondaryFrequency, "МГц")] : []),
       createSummaryItem("Приём", receptionLabel)
     );
     renderMath();

@@ -193,17 +193,17 @@
         const F = SignalData.level_cumulative[index] || 0;
         return `<tr><td>${index + 1}</td><td>${left} ... ${right}</td><td>${level.toFixed(3)}</td><td>${p.toFixed(4)}</td><td>${F.toFixed(4)}</td></tr>`;
       }).join("");
-      const table = `<div class="quant-table-wrap"><table class="quant-table"><thead><tr><th>j</th><th>интервал x(kΔt)</th><th>v_j, В</th><th>p_j</th><th>F_j</th></tr></thead><tbody>${levelRows}</tbody></table></div>`;
+      const table = `<div class="quant-table-wrap"><table class="quant-table"><thead><tr><th>\\(j\\)</th><th>интервал \\(x(k\\Delta t)\\)</th><th>\\(v_j\\), В</th><th>\\(p_j\\)</th><th>\\(F_j\\)</th></tr></thead><tbody>${levelRows}</tbody></table></div>`;
 
       const usedLevelCount = new Set(visibleIndices).size;
-      const scaleNote = `<dl class="visual-scale"><div><dt>Фрагмент</dt><dd>${visibleOriginal.length} отсчётов</dd></div><div><dt>Шаг</dt><dd>ΔU=${dU.toFixed(3)} В</dd></div><div><dt>Уровни</dt><dd>${usedLevelCount} разных из ${levelCount}</dd></div></dl>`;
-      const histScale = `<dl class="visual-scale"><div><dt>Столбцы</dt><dd>p_j</dd></div><div><dt>Красная линия</dt><dd>F_j</dd></div><div><dt>Пунктир</dt><dd>форма W_g(u)</dd></div></dl>`;
+      const scaleNote = `<dl class="visual-scale"><div><dt>Фрагмент</dt><dd>${visibleOriginal.length} отсчётов</dd></div><div><dt>Шаг</dt><dd>\\(\\Delta U=${dU.toFixed(3)}\\) В</dd></div><div><dt>Уровни</dt><dd>${usedLevelCount} разных из \\(L=${levelCount}\\)</dd></div></dl>`;
+      const histScale = `<dl class="visual-scale"><div><dt>Столбцы</dt><dd>\\(p_j\\)</dd></div><div><dt>Красная линия</dt><dd>\\(F_j\\)</dd></div><div><dt>Пунктир</dt><dd>форма \\(W_g(u)\\)</dd></div></dl>`;
 
       return `<div class="stage-panel__visuals-stack">
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Отсчёт x(kΔt) → квантованный уровень v_k^j</p>${scaleNote}${timeSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Отсчёт \\(x(k\\Delta t)\\) → квантованный уровень \\(v_k^j\\)</p>${scaleNote}${timeSvg}</div>
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Амплитудная характеристика квантователя</p>${scaleNote}${stairSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Вероятности p_j и интегральное распределение F_j</p>${histScale}${histSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Распределение ошибки квантования ξк=v_j-x_k</p>${scaleNote}${errSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Вероятности \\(p_j\\) и интегральное распределение \\(F_j\\)</p>${histScale}${histSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Распределение ошибки квантования \\(\\xi_\\text{к}=v_j-x_k\\)</p>${scaleNote}${errSvg}</div>
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Полная таблица интервалов, уровней и вероятностей</p>${table}</div>
       </div>`;
     },

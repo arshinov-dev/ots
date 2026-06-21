@@ -101,13 +101,12 @@
       const codeRows = SignalData.received_code_words.slice(wordStart, wordEnd).map((word, offset) => {
         const index = wordStart + offset;
         const original = SignalData.original_code_words[index] || "0".repeat(mu);
-        const error = SignalData.error_code_words[index] || "0".repeat(mu);
         const decodedLevel = SignalData.v_hat[index] ?? 0;
         const expectedLevel = SignalData.quantized_v[index] ?? decodedLevel;
         const changed = word !== original;
-        return `<tr class="${changed ? "is-error-row" : ""}"><td>${index + 1}</td><td>${original}</td><td>${error}</td><td>${word}</td><td>${decodedLevel.toFixed(3)}</td><td>${(decodedLevel - expectedLevel).toFixed(3)}</td></tr>`;
+        return `<tr class="${changed ? "is-error-row" : ""}"><td>${index + 1}</td><td>${original}</td><td>${word}</td><td>${expectedLevel.toFixed(3)}</td><td>${decodedLevel.toFixed(3)}</td><td>${(decodedLevel - expectedLevel).toFixed(3)}</td></tr>`;
       }).join("");
-      const codeTable = `<div class="quant-table-wrap"><table class="quant-table code-table"><thead><tr><th>k</th><th>b_k</th><th>E_k</th><th>b̂_k</th><th>v̂, В</th><th>ξп, В</th></tr></thead><tbody>${codeRows}</tbody></table></div>`;
+      const codeTable = `<div class="quant-table-wrap"><table class="quant-table code-table"><thead><tr><th>k</th><th>\\(b_k^\\mu\\)</th><th>\\(\\hat b_k^\\mu\\)</th><th>\\(v_k^j\\), В</th><th>\\(\\hat v_k^j\\), В</th><th>ошибка, В</th></tr></thead><tbody>${codeRows}</tbody></table></div>`;
 
       const errH = 130;
       const bits = SignalData.error_code_words.slice(wordStart, wordEnd).join("");
@@ -164,11 +163,16 @@
       const errorsInWindow = SignalData.received_code_words.slice(wordStart, wordEnd)
         .filter((word, offset) => word !== SignalData.original_code_words[wordStart + offset]).length;
       const scaleNote = `<dl class="visual-scale"><div><dt>Фрагмент</dt><dd>${visibleWords} уровней</dd></div><div><dt>Передано / восстановлено</dt><dd>синий / зелёный</dd></div><div><dt>Ошибки</dt><dd>${errorsInWindow} в окне</dd></div></dl>`;
-      const codeScale = `<dl class="visual-scale"><div><dt>Цепочка</dt><dd>b̂_k^μ → v̂_k^j → x̂(t)</dd></div><div><dt>Разрядность</dt><dd>μ=${mu}</dd></div><div><dt>Слова</dt><dd>${wordStart + 1}–${wordEnd}</dd></div></dl>`;
-      const errorDetails = `<details class="visual-step"><summary class="visual-step__summary"><span>Ошибки</span><strong>Показать вектор битовых ошибок E_i</strong></summary><div class="visual-step__body">${codeScale}${errSvg}</div></details>`;
+      const codeScale = `<dl class="visual-scale"><div><dt>Цепочка</dt><dd>\\(\\hat b_k^\\mu \\to \\hat v_k^j \\to \\hat x(t)\\)</dd></div><div><dt>Разрядность</dt><dd>\\(\\mu=${mu}\\)</dd></div><div><dt>Слова</dt><dd>${wordStart + 1}–${wordEnd}</dd></div></dl>`;
+      const noErrorMessage = `<div class="stage-panel__info-box stage-panel__info-box--ok">В выбранном фрагменте ошибок уровня нет; шум передачи рассчитан статистически через \(p_{ош}\).</div>`;
+      const transmissionNote = `<div class="stage-panel__info-box"><strong>Шум передачи — это не \(n(t)\) из канала.</strong> Он возникает после декодера, когда из-за ошибки битов восстанавливается неправильный уровень. Итоговая формула по методичке: \\( \\xi_п^2 = \\left(\\frac{2}{\\pi}\\operatorname{Si}(\\pi)-1\\right)\\Delta U^2 \\overline{p}_{ош} \\sum_i p_i \\sum_j (j-i)^2 \\).</div>`;
+      const errorDetails = `<details class="visual-step"><summary class="visual-step__summary"><span>Ошибки</span><strong>Дополнительно: вектор битовых ошибок \(E_i\)</strong></summary><div class="visual-step__body">${codeScale}${errSvg}</div></details>`;
+      const levelsLayer = errorsInWindow === 0
+        ? `<div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">\\(\\hat v_k^j \\to \\hat x(t)\\): ступенчатая интерполяция ЦАП</p>${noErrorMessage}</div>`
+        : `<div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">\\(\\hat v_k^j \\to \\hat x(t)\\): ошибка бита превращается в ошибку уровня</p>${scaleNote}${decSVG}${transmissionNote}</div>`;
       return `<div class="stage-panel__visuals-stack">
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">b̂_k^μ → v̂_k^j: декодирование принятых слов</p>${codeScale}${codeTable}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">v̂_k^j → x̂(t): ступенчатая интерполяция ЦАП</p>${scaleNote}${decSVG}<div class="stage-panel__info-box">Ступени появляются после декодирования и интерполяции ЦАП.</div></div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">\\(\\hat b_k^\\mu \\to \\hat v_k^j\\): декодирование принятых слов</p>${codeScale}${codeTable}</div>
+        ${levelsLayer}
         <div class="stage-panel__visuals-layer">${errorDetails}</div>
       </div>`;
     },
@@ -180,7 +184,7 @@
       const xiAnalytic = SignalData.transmission_noise_analytic_sq || 0;
       const tnCoeff = tnMeta?.coefficient || 0.1777;
       const tnSumTransitions = tnMeta?.sumTransitions || transitionFactor;
-      let theory = "Пачки из μ битов снова группируются и переводятся в десятичный номер уровня. Если хотя бы один бит был искажён, декодер восстановит неправильный уровень.";
+      let theory = `Пачки из \\(\\mu\\) битов снова группируются и переводятся в десятичный номер уровня. Если хотя бы один бит был искажён, декодер восстановит неправильный уровень.`;
       let formulas = `<div class="formula-preview"><span>Битовый канал и обратное кодирование</span>\\[ \\hat{b}_i=b_i\\oplus_2E_i,\\quad ${codebook[0]}\\to v_1,\\ldots,${codebook[thresholdCount - 1]}\\to v_{${thresholdCount}},\\quad ${codebook[levelCount - 1]}\\to v_{${levelCount}} \\]</div>`;
       formulas += `<div class="formula-preview"><span>Формула обратного пересчета уровня</span>\\[ \\hat{v}_j = -3\\sigma_g + (j-1{,}5)\\Delta U \\]</div>`;
       const chunkErrors = SignalData.chunkErrors || [];

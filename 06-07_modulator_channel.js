@@ -238,7 +238,7 @@
             for (let row = 0; row < 3; row++) {
               const cy = rowCenter(row);
               oscSvg += `<line x1="0" y1="${cy}" x2="${W}" y2="${cy}" stroke="#1f2b26" stroke-width="1.2" />
-                <text x="14" y="${cy - 14}" fill="#31433b" font-family="monospace" font-size="14">${row === 0 ? "b(t): 0/1" : row === 1 ? "uн(t)" : "S(t)"}</text>`;
+                <text x="14" y="${cy - 14}" fill="#31433b" font-family="monospace" font-size="14">${row === 0 ? "b[k]" : row === 1 ? "u_n(t)" : "S(t)"}</text>`;
             }
             for (let i = 0; i <= zoom.length; i++) {
               const x = i * bitStepX;
@@ -276,8 +276,8 @@
               oscSvg += `<text x="${W - 18}" y="${rowCenter(2) - 18}" fill="#31433b" font-family="monospace" font-size="13" text-anchor="end">смена фазы при 0</text>`;
             }
             oscSvg += `</svg>`;
-            const bitScale = `<dl class="visual-scale"><div><dt>Окно</dt><dd>биты ${zoom.start + 1}-${zoom.end}</dd></div><div><dt>Управление</dt><dd>${params.modulation === "DAM" ? "бит меняет амплитуду" : params.modulation === "DCHM" ? "бит выбирает f1 или f2" : "бит меняет относительную фазу"}</dd></div><div><dt>Амплитуда</dt><dd>U_m=${(SignalData.Um || 0).toFixed(4)} В</dd></div></dl>`;
-            const visualNote = `<p class="stage-panel__info-box stage-panel__info-box--ok">Осциллограмма показана в учебном масштабе: реальные несущие частоты заданы в МГц, для наглядности частота на графике нормирована.</p>`;
+            const bitScale = `<dl class="visual-scale"><div><dt>Окно</dt><dd>${zoom.length} символов</dd></div><div><dt>Меняется</dt><dd>${params.modulation === "DAM" ? "амплитуда" : params.modulation === "DCHM" ? "частота" : "относительная фаза"}</dd></div><div><dt>Амплитуда</dt><dd>\\(U_m=${(SignalData.Um || 0).toFixed(4)}\\,\\text{В}\\)</dd></div></dl>`;
+            const visualNote = `<p class="stage-panel__info-box stage-panel__info-box--ok">Осциллограмма нормирована по времени: реальные частоты заданы в МГц, здесь показан учебный масштаб.</p>`;
             const symbolRows = (SignalData.modulation_symbols || []).slice(zoom.start, zoom.end).map((symbol, index) => {
               const shownBit = symbol.bit > 0 ? "1" : "0";
               const phasePi = symbol.phase / Math.PI;
@@ -288,7 +288,7 @@
                   : `φ=${phasePi.toFixed(1)}π`;
               return `<tr><td>${zoom.start + index + 1}</td><td>${shownBit}</td><td>${state}</td></tr>`;
             }).join("");
-            const symbolTable = `<div class="quant-table-wrap"><table class="quant-table"><thead><tr><th>бит</th><th>b</th><th>параметр несущей</th></tr></thead><tbody>${symbolRows}</tbody></table></div>`;
+            const symbolTable = `<div class="quant-table-wrap"><table class="quant-table"><thead><tr><th>бит</th><th>\\(b\\)</th><th>параметр несущей</th></tr></thead><tbody>${symbolRows}</tbody></table></div>`;
             const symbolDetails = `<details class="visual-step"><summary class="visual-step__summary"><span>Параметры</span><strong>Показать закон манипуляции по символам</strong></summary><div class="visual-step__body">${symbolTable}</div></details>`;
 
             const specH = 240;
@@ -333,11 +333,16 @@
                 <text class="plot-note" x="${sx(f0 + lobeHalfWidth)}" y="${baseY - 8}" text-anchor="middle">f0+Δfц</text>`;
             }
             specSvg += `</svg>`;
-            const spectrumScale = `<dl class="visual-scale"><div><dt>Спектр</dt><dd>S(f), схематически</dd></div><div><dt>Цифровая полоса</dt><dd>Δfц=${window.RadioMath.getDigitalBandwidth(params).toFixed(2)} кГц</dd></div><div><dt>Полоса сигнала</dt><dd>Δfs=${(SignalData.df_s || 0).toFixed(2)} кГц</dd></div></dl>`;
+            const spectrumScale = `<dl class="visual-scale"><div><dt>Спектр</dt><dd>\\(S(f)\\), нормировано</dd></div><div><dt>Цифровая полоса</dt><dd>\\(\\Delta f_ц=${window.RadioMath.getDigitalBandwidth(params).toFixed(2)}\\,\\text{кГц}\\)</dd></div><div><dt>Полоса сигнала</dt><dd>\\(\\Delta f_s=${(SignalData.df_s || 0).toFixed(2)}\\,\\text{кГц}\\)</dd></div></dl>`;
+            const spectrumExplanation = params.modulation === "DAM"
+              ? `<p class="stage-panel__graph-purpose">Одна область около \\(f_0\\) и боковые полосы; \\(\\Delta f_s=2\\Delta f_ц\\).</p>`
+              : params.modulation === "DCHM"
+                ? `<p class="stage-panel__graph-purpose">Две области около \\(f_1\\) и \\(f_2\\); общая \\(\\Delta f_s\\) включает разнос несущих и боковые полосы.</p>`
+                : `<p class="stage-panel__graph-purpose">Одна область около \\(f_0\\); ширина \\(\\Delta f_s\\) соответствует формуле методички.</p>`;
             return `<div class="stage-panel__visuals-stack">
-              <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Учебная осциллограмма дискретной манипуляции</p>${bitScale}${oscSvg}${visualNote}</div>
+              <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">\\(b(t)\\) → \\(u_{н}(t)\\) → \\(s(t,b_k^\\mu)\\)</p>${bitScale}${oscSvg}${visualNote}</div>
               <div class="stage-panel__visuals-layer">${symbolDetails}</div>
-              <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Схематический нормированный спектр S(f)</p>${spectrumScale}${specSvg}</div>
+              <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Схематический нормированный спектр \\(S(f)\\)</p>${spectrumScale}${specSvg}${spectrumExplanation}</div>
             </div>`;
         },
 
@@ -473,15 +478,19 @@
               <text x="${W - 22}" y="48" fill="#0c6b4f" font-family="monospace" font-size="14" text-anchor="end">Райс</text>`;
             envelopeSvg += `</svg>`;
 
-            const scaleNote = `<dl class="visual-scale"><div><dt>Общий масштаб</dt><dd>±${maxZ.toFixed(4)} В</dd></div><div><dt>Окно</dt><dd>биты ${zoom.start + 1}-${zoom.end}</dd></div><div><dt>Модель</dt><dd>z(t)=χS(t)+n(t)</dd></div></dl>`;
-            const noiseScale = `<dl class="visual-scale"><div><dt>σш</dt><dd>${sigma.toFixed(4)} В</dd></div><div><dt>Pш</dt><dd>${(SignalData.P_sh || 0).toFixed(6)} Вт</dd></div><div><dt>Модель</dt><dd>n(t)=Nшc cosωt + Nшs sinωt</dd></div></dl>`;
-            const channelScheme = `<dl class="visual-scale"><div><dt>Модель канала</dt><dd>S(t) → χS(t) + n(t) → z(t)</dd></div><div><dt>χ</dt><dd>не задан в варианте, в расчётах принято χ = 1</dd></div></dl>`;
-            const powerScale = `<dl class="visual-scale"><div><dt>N0</dt><dd>${power.N0}</dd></div><div><dt>Pш</dt><dd>${power.P_sh.toFixed(6)} Вт</dd></div><div><dt>Ps</dt><dd>${power.P_c.toFixed(6)} Вт</dd></div></dl>
-              <dl class="visual-scale"><div><dt>Um</dt><dd>${power.Um.toFixed(4)} В</dd></div><div><dt>C</dt><dd>${power.capacity.toFixed(2)} кбит/с</dd></div><div><dt>χ</dt><dd>1</dd></div></dl>`;
+            const scaleNote = `<dl class="visual-scale"><div><dt>Общий масштаб</dt><dd>±${maxZ.toFixed(4)} В</dd></div><div><dt>Окно</dt><dd>биты ${zoom.start + 1}-${zoom.end}</dd></div><div><dt>\\(\\chi\\)</dt><dd>1 (не задан в варианте)</dd></div></dl>`;
+            const noiseScale = `<dl class="visual-scale"><div><dt>\\(\\sigma_ш\\)</dt><dd>${sigma.toFixed(4)} В</dd></div><div><dt>\\(P_ш\\)</dt><dd>${(SignalData.P_sh || 0).toFixed(6)} Вт</dd></div><div><dt>Модель</dt><dd>\\(n(t)=N_{шc}\\cos\\omega_ш t + N_{шs}\\sin\\omega_ш t\\)</dd></div></dl>`;
+            const powerScale = `<dl class="visual-scale"><div><dt>\\(N_0\\)</dt><dd>${power.N0}</dd></div><div><dt>\\(P_ш\\)</dt><dd>${power.P_sh.toFixed(6)} Вт</dd></div><div><dt>\\(P_s\\)</dt><dd>${power.P_c.toFixed(6)} Вт</dd></div></dl>`;
+            const noiseBandScheme = `<div class="stage-panel__info-box"><svg viewBox="0 0 220 80" width="200" height="72" style="display:block;margin:0 auto;">
+              <rect x="45" y="18" width="140" height="40" fill="rgba(231,76,60,0.12)" stroke="#e74c3c" stroke-width="2" />
+              <text x="115" y="44" text-anchor="middle" fill="#1f2b26" font-family="monospace" font-size="13">Pш = N₀·Δfs</text>
+              <text x="115" y="72" text-anchor="middle" fill="#62716b" font-family="monospace" font-size="11">Δfs = ${power.df_s.toFixed(2)} кГц</text>
+              <text x="22" y="44" text-anchor="middle" fill="#62716b" font-family="monospace" font-size="11" transform="rotate(-90 22 44)">N₀</text>
+            </svg></div>`;
             const cloudDetails = `<details class="visual-step"><summary class="visual-step__summary"><span>Статистика</span><strong>Показать облако синфазной и квадратурной помехи</strong></summary><div class="visual-step__body">${noiseScale}${cloudSvg}</div></details>`;
             const envelopeDetails = `<details class="visual-step"><summary class="visual-step__summary"><span>Огибающие</span><strong>Показать распределения Рэлея и Райса</strong></summary><div class="visual-step__body">${noiseScale}${envelopeSvg}</div></details>`;
             return `<div class="stage-panel__visuals-stack">
-                <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Канал: S(t) → n(t) → z(t)</p>${channelScheme}${powerScale}${scaleNote}${channelSvg}</div>
+                <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Канал: \\(S(t) \\to n(t) \\to z(t)\\)</p>${noiseBandScheme}${powerScale}${scaleNote}${channelSvg}</div>
                 <div class="stage-panel__visuals-layer">
                     <p class="stage-panel__visuals-header">ФПВ мгновенных значений шума</p>
                     ${noiseScale}${pdfSvg}

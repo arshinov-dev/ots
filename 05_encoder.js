@@ -206,21 +206,21 @@
         <text x="${W * 0.56 + barW / 2}" y="${probH - 8}" fill="#62716b" font-family="monospace" font-size="14" text-anchor="middle">1</text>
         <line x1="${W * 0.16}" y1="${probH - 24 - 0.5 * (probH - 46)}" x2="${W * 0.86}" y2="${probH - 24 - 0.5 * (probH - 46)}" stroke="#e74c3c" stroke-width="1.6" stroke-dasharray="6,6" />`;
       probSvg += `</svg>`;
-      const zoomScale = `<dl class="visual-scale"><div><dt>Окно</dt><dd>биты ${zoom.start + 1}-${zoom.end}</dd></div><div><dt>Отсчёт</dt><dd>Δt=${dt.toFixed(4)} мс</dd></div><div><dt>Символ</dt><dd>τсим=${tauSim.toFixed(4)} мс</dd></div><div><dt>Код</dt><dd>${mu} бит на один уровень</dd></div></dl>`;
-      const spectrumScale = `<dl class="visual-scale"><div><dt>Спектр</dt><dd>B(f), нормировано</dd></div><div><dt>Первый ноль</dt><dd>1/τсим=${(1 / tauSim).toFixed(2)} кГц</dd></div><div><dt>Полоса</dt><dd>Δfц=${(2 / tauSim).toFixed(2)} кГц</dd></div></dl>`;
-      const probScale = `<dl class="visual-scale"><div><dt>p(0)</dt><dd>${p0.toFixed(4)}</dd></div><div><dt>p(1)</dt><dd>${p1.toFixed(4)}</dd></div><div><dt>Ожидание</dt><dd>для симметричного гауссовского входа близко к 0.5</dd></div></dl>`;
+      const zoomScale = `<dl class="visual-scale"><div><dt>Окно</dt><dd>биты ${zoom.start + 1}-${zoom.end}</dd></div><div><dt>Символ</dt><dd>\\(\\tau_{сим}=${tauSim.toFixed(4)}\\) мс, \\(\\mu=${mu}\\)</dd></div><div><dt>Отсчёт</dt><dd>\\(\\Delta t=${dt.toFixed(4)}\\) мс</dd></div></dl>`;
+      const spectrumScale = `<dl class="visual-scale"><div><dt>Спектр</dt><dd>\\(B(f)\\), нормировано</dd></div><div><dt>Первый ноль</dt><dd>\\(1/\\tau_{сим}=${(1 / tauSim).toFixed(2)}\\) кГц</dd></div><div><dt>Полоса</dt><dd>\\(\\Delta f_ц=${(2 / tauSim).toFixed(2)}\\) кГц</dd></div></dl>`;
+      const probScale = `<dl class="visual-scale"><div><dt>\\(p(0)\\)</dt><dd>${p0.toFixed(4)}</dd></div><div><dt>\\(p(1)\\)</dt><dd>${p1.toFixed(4)}</dd></div><div><dt>Ожидание</dt><dd>для симметричного гауссовского входа близко к 0.5</dd></div></dl>`;
 
       const codeTableCollapsible = `<details class="visual-step"><summary class="visual-step__summary"><span>Таблица</span><strong>Показать таблицу кодов</strong></summary><div class="visual-step__body">${codeTable}</div></details>`;
       const distanceTableCollapsible = `<details class="visual-step"><summary class="visual-step__summary"><span>Матрица</span><strong>Показать матрицу расстояний</strong></summary><div class="visual-step__body">${distanceTable}</div></details>`;
       const meanderCollapsible = `<details class="visual-step"><summary class="visual-step__summary"><span>Меандр</span><strong>Показать битовую временную диаграмму</strong></summary><div class="visual-step__body">${zoomScale}${zoomSvg}</div></details>`;
 
       return `<div class="stage-panel__visuals-stack">
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Квантованный уровень v_k^j → ${mu}-разрядное кодовое слово b_k^μ</p>${tapeScale}${codeTapeSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Квантованный уровень \\(v_k^j\\) → \\(\\mu=${mu}\\)-разрядное кодовое слово \\(b_k^\\mu\\)</p>${tapeScale}${codeTapeSvg}</div>
         <div class="stage-panel__visuals-layer">${codeTableCollapsible}</div>
         <div class="stage-panel__visuals-layer">${distanceTableCollapsible}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Априорные вероятности битов p(0) и p(1)</p>${probScale}${probSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Априорные вероятности битов \\(p(0)\\) и \\(p(1)\\)</p>${probScale}${probSvg}</div>
         <div class="stage-panel__visuals-layer">${meanderCollapsible}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Линейчатый нормированный спектр B(f)</p>${spectrumScale}${specSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Линейчатый нормированный спектр \\(B(f)\\)</p>${spectrumScale}${specSvg}</div>
       </div>`;
     },
 
@@ -235,7 +235,7 @@
       const redundancy = Math.max(0, 1 - entropy / mu);
       const p0 = SignalData.bit_probabilities?.zero ?? 0.5;
       const p1 = SignalData.bit_probabilities?.one ?? 0.5;
-      let theory = `Кодер превращает номер уровня в безызбыточную ${mu}-битную комбинацию. Один отсчёт Δt распадается на ${mu} прямоугольных символов, поэтому изменение разрядности меняет битовую скорость и спектр.`;
+      let theory = `Кодер превращает номер уровня в безызбыточную \\(\\mu=${mu}\\)-битную комбинацию. Один отсчёт \\(\\Delta t=${dt.toFixed(4)}\\) мс распадается на \\(\\mu=${mu}\\) прямоугольных символов, поэтому изменение разрядности меняет битовую скорость и спектр.`;
       let formulas = `<div class="formula-preview"><span>Разрядность кодера</span>\\[ L+1=${levelCount}=2^{${mu}} \\implies \\mu=\\log_2(L+1)=${mu}\\text{ бит},\\quad L=${thresholdCount} \\]</div>`;
       formulas += `<div class="formula-preview"><span>Длительность символа</span>\\[ \\tau_{сим} = \\frac{\\Delta t}{\\mu} = \\frac{${toLatexNumber(dt.toFixed(4))}}{${mu}} \\approx ${toLatexNumber(tauSim.toFixed(4))} \\text{ мс} \\]</div>`;
       formulas += `<div class="formula-preview"><span>Оценка ширины спектра цифрового сигнала</span>\\[ \\Delta f_ц = \\frac{k_1}{\\tau_{сим}},\\quad k_1=${k1},\\quad \\Delta f_ц \\approx ${toLatexNumber(digitalBandwidth.toFixed(2))} \\text{ кГц} \\]</div>`;

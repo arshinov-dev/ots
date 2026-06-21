@@ -477,15 +477,15 @@
         xLabel: "f, кГц", yLabel: "G_g(f), В²/кГц", samples: spectrumSamples, color: "#287c9f", extra: spectrumExtra
       });
       const pdfNote = `<div class="stage-panel__info-box">Одномерная плотность вероятности гауссовского сигнала: \\( W_g(u)=\\dfrac{1}{\\sigma_g\\sqrt{2\\pi}}\\exp\\left(-\\dfrac{u^2}{2\\sigma_g^2}\\right) \\), где \\( \\sigma_g=${sigmaG.toFixed(3)} \\) В.</div>`;
-      const timeScale = `<dl class="visual-scale"><div><dt>Среднее</dt><dd>M{g}=0 В</dd></div><div><dt>СКО</dt><dd>σg=${sigmaG.toFixed(3)} В</dd></div><div><dt>Окно</dt><dd>${(timeEnd - timeStart).toFixed(3)} мс</dd></div></dl>`;
-      const corrScale = `<dl class="visual-scale"><div><dt>В нуле</dt><dd>Bc(0)=Pg=${Pg.toFixed(3)} В²</dd></div><div><dt>Параметр формы</dt><dd>β=${beta.toFixed(2)} мс⁻¹</dd></div><div><dt>Диапазон</dt><dd>±${tauMax.toFixed(3)} мс</dd></div></dl>`;
-      const spectrumScale = `<dl class="visual-scale"><div><dt>Полоса</dt><dd>Δfg=${dfg.toFixed(2)} кГц</dd></div><div><dt>Распределение</dt><dd>Gg(f), В²/кГц</dd></div></dl>`;
+      const timeScale = `<dl class="visual-scale"><div><dt>Среднее</dt><dd>\\(M\{g\}=0\\) В</dd></div><div><dt>СКО</dt><dd>\\(\\sigma_g=${sigmaG.toFixed(3)}\\) В</dd></div><div><dt>Окно</dt><dd>${(timeEnd - timeStart).toFixed(3)} мс</dd></div></dl>`;
+      const corrScale = `<dl class="visual-scale"><div><dt>В нуле</dt><dd>\\(B_c(0)=P_g=${Pg.toFixed(3)}\\) В²</dd></div><div><dt>Параметр формы</dt><dd>\\(\\beta=${beta.toFixed(2)}\\) мс⁻¹</dd></div><div><dt>Диапазон</dt><dd>±${tauMax.toFixed(3)} мс</dd></div></dl>`;
+      const spectrumScale = `<dl class="visual-scale"><div><dt>Полоса</dt><dd>\\(\\Delta f_g=${dfg.toFixed(2)}\\) кГц</dd></div><div><dt>Распределение</dt><dd>\\(G_g(f)\\), В²/кГц</dd></div></dl>`;
 
       return `<div class="stage-panel__visuals-stack">
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">1. Временная реализация g(t)</p>${timeScale}${timeSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">2. Корреляционная функция Bc(τ)</p>${corrScale}${corrSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">3. Спектральная плотность Gg(f)</p>${spectrumScale}${spectrumSvg}</div>
-        <details class="stage-panel__visuals-layer"><summary class="stage-panel__visuals-header">Гауссовское распределение Wg(u)</summary>${pdfNote}</details>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">1. Временная реализация \\(g(t)\\)</p>${timeScale}${timeSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">2. Корреляционная функция \\(B_c(\\tau)\\)</p>${corrScale}${corrSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">3. Спектральная плотность \\(G_g(f)\\)</p>${spectrumScale}${spectrumSvg}</div>
+        <details class="stage-panel__visuals-layer"><summary class="stage-panel__visuals-header">Гауссовское распределение \\(W_g(u)\\)</summary>${pdfNote}</details>
       </div>`;
     },
 

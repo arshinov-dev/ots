@@ -157,13 +157,13 @@
       compSvg += `</svg>`;
 
       const isSuccess = (SignalData.delta_sum_sq || 0) <= acceptableError;
-      const stepScale = `<dl class="visual-scale"><div><dt>Ступени</dt><dd>x̂(t), ${stepWindow.length} уровней</dd></div><div><dt>Сглаживание</dt><dd>ĝ(t)</dd></div><div><dt>Общее окно</dt><dd>${(timeEnd - timeStart).toFixed(3)} мс</dd></div></dl>`;
-      const compareScale = `<dl class="visual-scale"><div><dt>Синяя</dt><dd>исходное g(t)</dd></div><div><dt>Фиолетовая</dt><dd>восстановленное ĝ(t)</dd></div><div><dt>Окно</dt><dd>совпадает с x̂(t)</dd></div></dl>`;
-      const errorScale = `<dl class="visual-scale"><div><dt>Итог</dt><dd>δΣ²=${(SignalData.delta_sum_sq || 0).toFixed(4)}</dd></div><div><dt>Допуск</dt><dd>δдоп²=${acceptableError.toFixed(4)}</dd></div><div><dt>Результат</dt><dd>${isSuccess ? "норма" : "требуется корректировка"}</dd></div></dl>`;
+      const stepScale = `<dl class="visual-scale"><div><dt>Ступени</dt><dd>\\(\\hat x(t)\\), ${stepWindow.length} уровней</dd></div><div><dt>Сглаживание</dt><dd>\\(\\hat g(t)\\)</dd></div><div><dt>Общее окно</dt><dd>${(timeEnd - timeStart).toFixed(3)} мс</dd></div></dl>`;
+      const compareScale = `<dl class="visual-scale"><div><dt>Синяя</dt><dd>исходное \\(g(t)\\)</dd></div><div><dt>Фиолетовая</dt><dd>восстановленное \\(\\hat g(t)\\)</dd></div><div><dt>Окно</dt><dd>совпадает с \\(\\hat x(t)\\)</dd></div></dl>`;
+      const errorScale = `<dl class="visual-scale"><div><dt>Итог</dt><dd>\\(\\delta_\\Sigma^2=${(SignalData.delta_sum_sq || 0).toFixed(4)}\\)</dd></div><div><dt>Допуск</dt><dd>\\(\\delta_{доп}^2=${acceptableError.toFixed(4)}\\)</dd></div><div><dt>Результат</dt><dd>${isSuccess ? "норма" : "требуется корректировка"}</dd></div></dl>`;
       return `<div class="stage-panel__visuals-stack">
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">x̂(t) после интерполяции → сглаженный сигнал ĝ(t)</p>${stepScale}${stepSvg}${filterNote}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Финальное сравнение g(t) и ĝ(t)</p>${compareScale}${overlaySvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">ξф², ξкв², ξп² и официальная итоговая ошибка</p>${errorScale}${compSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">\\(\\hat x(t)\\) после интерполяции → сглаженный сигнал \\(\\hat g(t)\\)</p>${stepScale}${stepSvg}${filterNote}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Финальное сравнение \\(g(t)\\) и \\(\\hat g(t)\\)</p>${compareScale}${overlaySvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">\\(\\xi_ф^2\\), \\(\\xi_кв^2\\), \\(\\xi_п^2\\) и официальная итоговая ошибка</p>${errorScale}${compSvg}</div>
       </div>`;
     },
 
@@ -177,7 +177,7 @@
       const filterAbs = components.filterAbs ?? SignalData.filter_error_analytic_abs ?? 0;
       const quantAbs = components.quantAbs ?? SignalData.quantization_error_analytic_sq ?? 0;
       const transmissionAbs = components.transmissionAbs ?? SignalData.transmission_noise_analytic_sq ?? 0;
-      const theory = "Приёмный ФНЧ превращает восстановленные уровни ЦАП в непрерывную оценку сообщения. Модель: ступенчатый интерполятор с g₀(t) = 1 при t ∈ [0, T], затем идеальный ФНЧ с полосой Δfg.";
+      const theory = `Приёмный ФНЧ превращает восстановленные уровни ЦАП в непрерывную оценку сообщения. Модель: ступенчатый интерполятор с \\(g_0(t)=1\\) при \\(t\\in[0,T]\\), затем идеальный ФНЧ с полосой \\(\\Delta f_g\\).`;
       let formulas = `<div class="formula-preview"><span>Ступенчатая интерполяция ЦАП</span>\\[ \\hat{x}(t)=\\sum_k \\hat{v}_k g_0(t-k\\Delta t),\\quad g_0(t)=\\begin{cases}1,&0\\le t\\le\\Delta t\\\\0,&\\text{иначе}\\end{cases} \\]</div>`;
       formulas += `<div class="formula-preview"><span>Идеальный приёмный ФНЧ</span>\\[ |K(f)|=\\begin{cases}1,&|f|\\le\\Delta f_g\\\\0,&|f|>\\Delta f_g\\end{cases} \\]</div>`;
       formulas += `<details class="visual-step"><summary class="visual-step__summary"><span>ФНЧ</span><strong>Показать импульсную характеристику</strong></summary><div class="visual-step__body"><div class="formula-preview"><span>Импульсная характеристика идеального ФНЧ</span>\\[ h(t)=2\\Delta f_g\\cdot\\text{sinc}(2\\Delta f_g t),\\quad \\text{sinc}(x)=\\frac{\\sin(\\pi x)}{\\pi x} \\]</div></div></details>`;
