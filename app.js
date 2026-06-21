@@ -647,8 +647,23 @@
     return { W, H, N, yMin, yMax, getY, getX, yZero, getLocalY, drawCurveSVG, drawStemsSVG, drawDimX, drawDimY };
   }
 
+  const PARAM_SIGNATURE_FIELDS = [
+    "signalPower",
+    "beta",
+    "bandwidthFactor",
+    "signalBandwidth",
+    "samplingIncrease",
+    "modulation",
+    "primaryFrequency",
+    "secondaryFrequency",
+    "noiseDensity",
+    "signalNoiseRatio",
+    "reception",
+    "acceptableError",
+  ];
+
   function getParamsSignature(params) {
-    return JSON.stringify(Object.keys(params).sort().map((key) => [key, params[key]]));
+    return JSON.stringify(PARAM_SIGNATURE_FIELDS.map((name) => [name, params[name] ?? ""]));
   }
 
   // Обработка данных для всех этапов последовательно
@@ -656,6 +671,7 @@
     const paramsSignature = getParamsSignature(params);
     if (SignalData.lastParamsString === paramsSignature && SignalData.g_hat_t) return;
 
+    SignalData.resetDerived();
     SignalData.calculation = window.SystemCalculations.calculate(params);
     const stageIds = ["source", "tx-filter", "sampler", "quantizer", "encoder", "modulator", "channel", "detector", "decoder", "recipient"];
     for (const id of stageIds) {
@@ -825,6 +841,7 @@
     });
     updateConditionalFields(); updateDerivedFields();
     parametersForm.elements.reception.value = variant.reception;
+    SignalData.lastParamsString = null;
     renderParametersSummary();
     // Перерендериваем текущий этап с новыми параметрами варианта
     const currentStage = getStage(currentStageId);
@@ -883,6 +900,7 @@
   function handleParametersChange(event) {
     if (event.target.name === "variantPreset") { applyVariant(event.target.value); return; }
     if (!isApplyingVariant) variantPreset.value = "custom";
+    if (["modulation", "reception"].includes(event.target.name)) SignalData.lastParamsString = null;
     if (event.target.name === "modulation") updateConditionalFields();
     if (["beta", "bandwidthFactor"].includes(event.target.name)) updateDerivedFields();
     // Запоминаем изменённый параметр для подсветки зависимостей
@@ -896,8 +914,10 @@
   }
 
   function applyParameterValue(name, value) {
-    if (!parametersForm.elements[name]) return;
-    parametersForm.elements[name].value = value;
+    const formControl = parametersForm.elements[name];
+    if (!formControl) return;
+    formControl.value = String(value);
+    if (["modulation", "reception"].includes(name)) SignalData.lastParamsString = null;
     if (!isApplyingVariant) variantPreset.value = "custom";
     if (name === "modulation") updateConditionalFields();
     if (["beta", "bandwidthFactor"].includes(name)) updateDerivedFields();

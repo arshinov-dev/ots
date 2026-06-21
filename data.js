@@ -122,6 +122,33 @@
   window.SystemCalculations = { calculate };
 
   window.SignalData = {
+    resetDerived: function() {
+      const derivedFields = [
+        "calculation",
+        "source_components", "source_time_span_ms", "source_sigma", "source_spectrum_energy", "g_t",
+        "x_t", "filter_error_abs", "filter_error_sq", "filter_error_analytic_sq", "filter_error_analytic_abs",
+        "filtered_power_analytic", "filtered_power_empirical",
+        "sampled_x_indices", "sampled_x_values", "sampling_step_indices", "sampling_frequency", "sampling_interval_ms",
+        "thresholds", "levels", "quantized_indices", "quantized_v", "quantization_errors",
+        "level_probabilities", "level_probabilities_empirical", "level_cumulative", "quantized_power_analytic",
+        "quantization_eta", "quantization_gamma", "quantization_Px", "quantization_Py", "quantization_Bxv",
+        "quantization_error_sq", "quantization_error_analytic_sq", "quantization_error_approx_sq",
+        "quantization_step", "quantization_mu", "quantization_threshold_count", "quantization_level_count",
+        "quantization_delta_u1", "quantization_conditional_step",
+        "codebook", "code_words", "code_distance_matrix", "code_level_indices", "code_decimal_numbers",
+        "digital_b", "b_t", "bit_probabilities", "indexFromCode", "code_mu",
+        "S_t", "s_t", "radio_N", "radio_points_per_bit", "modulation_symbols", "df_s", "P_sh", "P_c", "Um", "noiseSigma",
+        "n_t", "z_t", "channel_chi", "zMax", "noise_quadrature",
+        "detectorTrace", "detector_channel1", "detector_channel2", "coherent_detects",
+        "b_hat", "errors", "p_err_val", "p_err_formula", "receiver_type", "receiver_desc", "u0",
+        "v_hat", "chunkErrors", "received_code_words", "original_code_words", "error_code_words", "decoded_indices",
+        "transmission_noise_sq", "transmission_noise_analytic_sq", "transmission_noise_meta", "transition_distance_factor",
+        "x_hat_t", "g_hat_t", "lpf_half_window", "lpf_first_zero", "lpf_fc_norm",
+        "reconstruction_error_t", "visual_delta_sq", "delta_sum_sq", "delta_sum_components"
+      ];
+      derivedFields.forEach((key) => { delete this[key]; });
+      this.lastParamsString = null;
+    },
     calculation: null,
     g_t: null,
     x_t: null,
@@ -149,6 +176,6 @@
     N: 1000,
     yMin: -4,
     yMax: 4,
-    lastParamsString: ""
+    lastParamsString: null
   };
 })();
