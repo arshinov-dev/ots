@@ -8,14 +8,14 @@
   const stages = [
     { id: "source", title: "Источник и первичный преобразователь", group: "source", signal: "c(t) → g(t)" },
     { id: "tx-filter", title: "Передающий ФНЧ", group: "tx", signal: "g(t) → x(t)" },
-    { id: "sampler", title: "Дискретизатор АЦП", group: "tx", signal: "x(t) → x(k · Δt)" },
-    { id: "quantizer", title: "Квантователь АЦП", group: "tx", signal: "x(k · Δt) → vₖʲ" },
-    { id: "encoder", title: "Кодер АЦП", group: "tx", signal: "vₖʲ → bₖᵘ" },
-    { id: "modulator", title: "Модулятор и выход ПДУ", group: "tx", signal: "bₖᵘ + uₙ(t) → S(t)" },
-    { id: "channel", title: "Непрерывный канал связи", group: "channel", signal: "S(t) + n(t) → z(t)" },
-    { id: "detector", title: "Вход ПРУ, детектор и РУ", group: "rx", signal: "z(t) → b̂ₖᵘ" },
-    { id: "decoder", title: "Декодер и интерполятор ЦАП", group: "rx", signal: "b̂ₖᵘ → x̂(t)" },
-    { id: "recipient", title: "Приёмный ФНЧ и получатель", group: "rx", signal: "x̂(t) → ĉ(t)" },
+    { id: "sampler", title: "Дискретизатор АЦП", group: "tx", signal: "x(t) → x(kΔt)" },
+    { id: "quantizer", title: "Квантователь АЦП", group: "tx", signal: "x(kΔt) → vₖʲ" },
+    { id: "encoder", title: "Кодер АЦП", group: "tx", signal: "vₖʲ → bₖ<sup>μ</sup>" },
+    { id: "modulator", title: "Модулятор и выход ПДУ", group: "tx", signal: "bₖ<sup>μ</sup> + u<sub>н</sub>(t) → s(t,bₖ<sup>μ</sup>) → S(t)" },
+    { id: "channel", title: "Непрерывный канал связи", group: "channel", signal: "S(t) → z(t)=χS(t)+n(t) (χ=1)" },
+    { id: "detector", title: "Вход ПРУ, детектор и РУ", group: "rx", signal: "z(t) → b̂ₖ<sup>μ</sup>" },
+    { id: "decoder", title: "Декодер и интерполятор ЦАП", group: "rx", signal: "b̂ₖ<sup>μ</sup> → x̂(t)" },
+    { id: "recipient", title: "Приёмный ФНЧ и получатель", group: "rx", signal: "x̂(t) → ĝ(t) → ĉ(t)" },
   ];
 
   const stageGuides = {
@@ -60,7 +60,7 @@
     encoder: {
       input: "уровни vₖʲ",
       action: "каждый уровень заменяется μ-битной кодовой комбинацией рассчитанной разрядности",
-      output: "цифровой поток bₖᵘ",
+      output: "цифровой поток bₖ<sup>μ</sup>",
       points: [
         "Сначала сопоставь уровень и кодовое слово.",
         "Потом смотри меандр b(t): именно он управляет радиомодулятором.",
@@ -68,7 +68,7 @@
       ],
     },
     modulator: {
-      input: "цифровой поток bₖᵘ и несущая uₙ(t)",
+      input: "цифровой поток bₖ<sup>μ</sup> и несущая u<sub>н</sub>(t)",
       action: "код управляет одним свойством несущей",
       output: "радиосигнал S(t)",
       points: [
@@ -89,7 +89,7 @@
     detector: {
       input: "смесь z(t)",
       action: "приёмник выбирает бит по правилу, зависящему от модуляции и способа приёма",
-      output: "оценка битов b̂ₖᵘ",
+      output: "оценка битов b̂ₖ<sup>μ</sup>",
       points: [
         "Для ДАМ важен порог амплитуды.",
         "Для ДЧМ сравнивается энергия в двух частотных ветках.",
@@ -97,7 +97,7 @@
       ],
     },
     decoder: {
-      input: "принятые биты b̂ₖᵘ",
+      input: "принятые биты b̂ₖ<sup>μ</sup>",
       action: "кодовые слова снова переводятся в амплитудные уровни",
       output: "восстановленные уровни x̂(t)",
       points: [
@@ -152,23 +152,23 @@
   // Используется только для одинаковых обозначений, кратких названий
   // и классификации. Расчёты и массивы остаются в SignalData.
   const SIGNAL_META = {
-    c:         { symbol: "c(t)",          name: "Сообщение источника",              type: "Непрерывное сообщение" },
-    g:         { symbol: "g(t)",          name: "Первичный электрический сигнал",   type: "Непрерывный случайный сигнал" },
-    x:         { symbol: "x(t)",          name: "Сигнал с ограниченным спектром",   type: "Непрерывный по времени и уровню" },
-    sampled:   { symbol: "x(kΔt)",        name: "Отсчёты сигнала",                   type: "Дискретный по времени, непрерывный по уровню" },
-    quantized: { symbol: "vₖʲ",           name: "Квантованная последовательность",   type: "Дискретный по времени и уровню" },
-    encoded:   { symbol: "bₖᵘ",           name: "Двоичная кодовая комбинация",       type: "Цифровой сигнал" },
-    carrier:   { symbol: "uₙ(t)",         name: "Гармоническая несущая",            type: "Непрерывное периодическое колебание" },
-    modulated: { symbol: "s(t,bₖᵘ)",      name: "Сигнал с дискретной модуляцией",    type: "Непрерывный физический сигнал" },
-    transmitted:{ symbol: "S(t)",          name: "Сигнал в линии связи",              type: "Непрерывный физический сигнал" },
-    noise:     { symbol: "n(t)",          name: "Помеха линии связи",               type: "Непрерывный случайный процесс" },
-    received:  { symbol: "z(t)",          name: "Смесь сигнала и помехи",            type: "Непрерывный случайный сигнал" },
-    detected:  { symbol: "ŝ(t,bₖᵘ)",     name: "Оценка модулированного сигнала",    type: "Непрерывный сигнал на выходе детектора" },
-    b_hat:     { symbol: "b̂ₖᵘ",          name: "Принятая кодовая комбинация",       type: "Цифровой сигнал" },
-    v_hat:     { symbol: "v̂ₖʲ",          name: "Восстановленный уровень",           type: "Дискретный по времени и уровню" },
-    x_hat:     { symbol: "x̂(t)",          name: "Ступенчатый сигнал ЦАП",            type: "Непрерывный по времени, дискретный по уровню" },
-    g_hat:     { symbol: "ĝ(t)",          name: "Восстановленное сообщение",         type: "Непрерывный по времени и уровню" },
-    c_hat:     { symbol: "ĉ(t)",          name: "Принятое сообщение",                type: "Непрерывное сообщение" },
+    c:         { symbol: "c(t)",          name: "Сообщение источника",                       type: "Непрерывное сообщение" },
+    g:         { symbol: "g(t)",          name: "Первичный электрический сигнал сообщения",  type: "Непрерывный случайный сигнал" },
+    x:         { symbol: "x(t)",          name: "Сигнал сообщения с ограниченным спектром",  type: "Непрерывный по времени и уровню" },
+    sampled:   { symbol: "x(kΔt)",        name: "Дискретизированный сигнал сообщения",       type: "Дискретный по времени, непрерывный по уровню" },
+    quantized: { symbol: "vₖʲ",           name: "Квантованное значение сигнала",             type: "Дискретный по времени и уровню" },
+    encoded:   { symbol: "bₖ<sup>μ</sup>", name: "μ-разрядная кодовая комбинация",           type: "Цифровой сигнал" },
+    carrier:   { symbol: "u<sub>н</sub>(t)", name: "Несущее гармоническое колебание",         type: "Непрерывное периодическое колебание" },
+    modulated: { symbol: "s(t,bₖ<sup>μ</sup>)", name: "Несущее колебание, модулированное сообщением", type: "Непрерывный физический сигнал" },
+    transmitted:{ symbol: "S(t)",         name: "Сигнал, передаваемый по линии связи",       type: "Непрерывный физический сигнал" },
+    noise:     { symbol: "n(t)",          name: "Помеха в линии связи",                      type: "Непрерывный случайный процесс" },
+    received:  { symbol: "z(t)",          name: "Сигнал на входе приёмника",                 type: "Непрерывный случайный сигнал" },
+    detected:  { symbol: "ŝ(t,bₖ<sup>μ</sup>)", name: "Принятый модулированный сигнал на выходе входного устройства ПРУ", type: "Непрерывный сигнал" },
+    b_hat:     { symbol: "b̂ₖ<sup>μ</sup>", name: "Принятая кодовая комбинация",              type: "Цифровой сигнал" },
+    v_hat:     { symbol: "v̂ₖʲ",          name: "Восстановленный квантованный уровень",      type: "Дискретный по времени и уровню" },
+    x_hat:     { symbol: "x̂(t)",          name: "Восстановленный сигнал после интерполяции", type: "Непрерывный по времени, дискретный по уровню" },
+    g_hat:     { symbol: "ĝ(t)",          name: "Восстановленный электрический сигнал сообщения", type: "Непрерывный по времени и уровню" },
+    c_hat:     { symbol: "ĉ(t)",          name: "Принятое сообщение после выходного преобразователя", type: "Непрерывное сообщение" },
   };
 
   // === Граф зависимостей параметров (только для подсветки и пояснения) ===
@@ -205,22 +205,22 @@
   const STAGE_META = {
     source: {
       inputSignals: ["c"], outputSignals: ["g"],
-      dependsOn: ["Pg", "beta"], affects: ["sigmaG", "dfg", "filterError"],
+      dependsOn: ["Pg", "beta"], affects: ["sigmaG", "dfg"],
       signalChange: "Сообщение превращается в электрический случайный процесс. Форма сохраняет информацию, но физическая природа меняется.",
     },
     "tx-filter": {
       inputSignals: ["g"], outputSignals: ["x"],
-      dependsOn: ["beta", "signalBandwidth"], affects: ["filterError", "samplingFrequency"],
+      dependsOn: ["beta", "signalBandwidth"], affects: ["filterError"],
       signalChange: "Форма сигнала сохраняется, но высокочастотные составляющие спектра за пределами Δfg подавляются.",
     },
     sampler: {
       inputSignals: ["x"], outputSignals: ["sampled"],
-      dependsOn: ["signalBandwidth", "samplingIncrease"], affects: ["samplingInterval", "bitDuration"],
+      dependsOn: ["signalBandwidth", "samplingIncrease"], affects: ["samplingFrequency", "samplingInterval"],
       signalChange: "Непрерывный сигнал превращается в последовательность отсчётов. Информация сохраняется при выполнении теоремы Котельникова.",
     },
     quantizer: {
       inputSignals: ["sampled"], outputSignals: ["quantized"],
-      dependsOn: ["Pg", "eta", "samplingIncrease"], affects: ["mu", "bitDuration", "quantizationNoise"],
+      dependsOn: ["Pg", "eta"], affects: ["mu", "levelCount", "quantizationNoise"],
       signalChange: "Отсчёты с произвольными значениями амплитуды заменяются ближайшими разрешёнными уровнями.",
     },
     encoder: {
@@ -230,18 +230,18 @@
     },
     modulator: {
       inputSignals: ["encoded", "carrier"], outputSignals: ["modulated", "transmitted"],
-      dependsOn: ["digitalBandwidth", "signalNoiseRatio", "noiseDensity"], affects: ["modulatedBandwidth", "noisePower", "Um"],
+      dependsOn: ["digitalBandwidth", "signalNoiseRatio"], affects: ["modulatedBandwidth", "Um"],
       signalChange: "Цифровой код управляет одним из параметров несущей. Форма зависит от вида модуляции.",
       miniTract: [
-        { node: "bₖᵘ", label: "Модулятор", out: "s(t,bₖᵘ)" },
+        { node: "bₖ<sup>μ</sup>", label: "Модулятор", out: "s(t,bₖ<sup>μ</sup>)" },
         { node: null, label: "Выход ПДУ", out: "S(t)" },
       ],
-      extraInput: "uₙ(t)",
+      extraInput: "u<sub>н</sub>(t)",
     },
     channel: {
       inputSignals: ["transmitted"], outputSignals: ["received"],
-      dependsOn: ["modulatedBandwidth", "noiseDensity", "signalNoiseRatio"], affects: ["noisePower", "signalPower", "errorProbability"],
-      signalChange: "Сигнал проходит через линию связи и смешивается с аддитивным гауссовским шумом.",
+      dependsOn: ["modulatedBandwidth", "noiseDensity"], affects: ["noisePower", "signalPower"],
+      signalChange: "Сигнал проходит через линию связи и смешивается с аддитивным гауссовским шумом. В расчётах принято χ=1.",
       miniTract: [
         { node: "S(t)", label: "Ослабление χ", out: "χS(t)" },
         { node: null, label: "+ n(t)", out: "z(t)" },
@@ -250,25 +250,25 @@
     },
     detector: {
       inputSignals: ["received"], outputSignals: ["b_hat"],
-      dependsOn: ["signalNoiseRatio", "Um"], affects: ["errorProbability", "transmissionNoise"],
+      dependsOn: ["signalPower", "noisePower", "signalNoiseRatio"], affects: ["errorProbability"],
       signalChange: "Детектор формирует отклик, из которого решающее устройство восстанавливает биты.",
       miniTract: [
-        { node: "z(t)", label: "Вход ПРУ", out: "ŝ(t,bₖᵘ)" },
-        { node: null, label: "Детектор → РУ", out: "b̂ₖᵘ" },
+        { node: "z(t)", label: "Вход ПРУ", out: "ŝ(t,bₖ<sup>μ</sup>)" },
+        { node: null, label: "Детектор → РУ", out: "b̂ₖ<sup>μ</sup>" },
       ],
     },
     decoder: {
       inputSignals: ["b_hat"], outputSignals: ["v_hat", "x_hat"],
-      dependsOn: ["mu", "errorProbability"], affects: ["transmissionNoise", "totalError"],
+      dependsOn: ["mu", "errorProbability"], affects: ["transmissionNoise"],
       signalChange: "Кодовые слова переводятся обратно в уровни, затем интерполятор формирует ступенчатый сигнал.",
       miniTract: [
-        { node: "b̂ₖᵘ", label: "Декодер", out: "v̂ₖʲ" },
+        { node: "b̂ₖ<sup>μ</sup>", label: "Декодер", out: "v̂ₖʲ" },
         { node: null, label: "Интерполятор", out: "x̂(t)" },
       ],
     },
     recipient: {
       inputSignals: ["x_hat"], outputSignals: ["g_hat", "c_hat"],
-      dependsOn: ["signalBandwidth", "filterError", "quantizationNoise", "transmissionNoise"], affects: ["totalError"],
+      dependsOn: ["filterError", "quantizationNoise", "transmissionNoise"], affects: ["totalError"],
       signalChange: "Ступенчатый сигнал сглаживается приёмным ФНЧ, образуя непрерывную оценку сообщения.",
       miniTract: [
         { node: "x̂(t)", label: "Приёмный ФНЧ", out: "ĝ(t)" },
@@ -454,13 +454,10 @@
     const outputTypes = outputs.map((s) => s.type).join("; ");
     let html = `<div class="signal-flow-block">`;
     html += `<div class="signal-flow-row">`;
-    html += `<div class="signal-flow-cell"><span>Вход</span><strong>${escapeHtml(inputSymbols)}</strong></div>`;
+    html += `<div class="signal-flow-cell"><span>Вход</span><strong>${inputSymbols}</strong></div>`;
     html += `<div class="signal-flow-arrow">→</div>`;
-    html += `<div class="signal-flow-cell"><span>Выход</span><strong>${escapeHtml(outputSymbols)}</strong></div>`;
+    html += `<div class="signal-flow-cell"><span>Выход</span><strong>${outputSymbols}</strong></div>`;
     html += `</div>`;
-    if (meta.signalChange) {
-      html += `<p class="signal-flow-change">${escapeHtml(meta.signalChange)}</p>`;
-    }
     html += `<div class="signal-flow-types"><span><em>Вход:</em> ${escapeHtml(inputTypes)}</span><span><em>Выход:</em> ${escapeHtml(outputTypes)}</span></div>`;
     html += `</div>`;
     return html;
@@ -481,7 +478,7 @@
       mu: "μ", levelCount: "L", bitDuration: "τ<sub>сим</sub>",
       digitalBandwidth: "Δf<sub>ц</sub>", quantizationNoise: "ξ<sub>кв</sub>²",
       modulatedBandwidth: "Δf<sub>s</sub>", noisePower: "P<sub>ш</sub>",
-      signalPower: "P<sub>c</sub>", Um: "U<sub>m</sub>",
+      signalPower: "P<sub>s</sub>", Um: "U<sub>m</sub>",
       errorProbability: "p<sub>ош</sub>", transmissionNoise: "ξ<sub>п</sub>²",
       totalError: "δ<sub>Σ</sub>²", channelCapacity: "C",
       noiseDensity: "N<sub>0</sub>", signalNoiseRatio: "h²",
@@ -509,17 +506,10 @@
   function renderLearningGuide(stage, params) {
     const guide = stageGuides[stage.id];
     if (!guide) return "";
-    const stageIndex = stages.findIndex((item) => item.id === stage.id);
-    const nextStage = stages[stageIndex + 1];
     const modulationNote = ["modulator", "detector"].includes(stage.id) ? getModulationLearningNote(params) : "";
-    const points = guide.points.map((point) => `<li>${escapeHtml(point)}</li>`).join("");
-    // Вход/Выход сигналов теперь в renderSignalFlowBlock; здесь — только действие и учебные точки
     return `<div class="stage-panel__content stage-panel__guide" data-group="${stage.group}">
-      <p class="eyebrow">Логика этапа</p>
-      <p class="stage-panel__action"><strong>Действие:</strong> ${escapeHtml(guide.action)}</p>
-      <ul class="learning-points">${points}</ul>
+      <p class="stage-panel__action"><strong>Что изменилось:</strong> ${escapeHtml(guide.action)}</p>
       ${modulationNote ? `<p class="stage-panel__guide-note">${escapeHtml(modulationNote)}</p>` : ""}
-      ${nextStage ? `<p class="stage-panel__next">Дальше: ${escapeHtml(nextStage.title)} · ${escapeHtml(nextStage.signal)}</p>` : ""}
     </div>`;
   }
 
@@ -647,7 +637,6 @@
     // Мини-тракт для объединённых карточек
     const miniTractHtml = renderMiniTract(stage.id);
     if (miniTractHtml) html += miniTractHtml;
-    if (theory) html += `<p class="stage-panel__theory">${theory}</p>`;
     html += `</div>`;
     // Блок «Вход → Выход» с классификацией сигналов
     const signalFlowHtml = renderSignalFlowBlock(stage.id);

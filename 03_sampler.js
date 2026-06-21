@@ -47,34 +47,6 @@
 
       svg += `</svg>`;
 
-      let holdSvg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
-      holdSvg += vm.axes(W, H, yZero, "t/Δt", "x(kΔt)");
-      holdSvg += drawCurveSVG(SignalData.x_t, '#0c6b4f', 1.8, 0.22);
-      let holdD = "";
-      SignalData.sampled_x_indices.forEach((idx, i) => {
-        const nextIdx = SignalData.sampled_x_indices[i + 1] ?? (SignalData.N - 1);
-        const x1 = getX(idx);
-        const x2 = getX(nextIdx);
-        const y = getY(SignalData.sampled_x_values[i]);
-        if (i === 0) holdD += `M ${x1} ${y} `;
-        else holdD += `L ${x1} ${y} `;
-        holdD += `L ${x2} ${y} `;
-        holdSvg += `<line x1="${x1}" y1="18" x2="${x1}" y2="${H - 18}" stroke="#b8c0bc" stroke-width="1" stroke-dasharray="4,7" />`;
-      });
-      holdSvg += `<path d="${holdD}" stroke="#1f2b26" stroke-width="2.8" fill="none" stroke-linejoin="miter" />`;
-      holdSvg += `</svg>`;
-
-      const combH = 190;
-      let combSvg = `<svg viewBox="0 0 ${W} ${combH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
-      combSvg += vm.axes(W, combH, combH - 26, "t", "δ_T(t)");
-      SignalData.sampled_x_indices.forEach((idx, index) => {
-        const x = getX(idx);
-        const tall = index % 5 === 0;
-        combSvg += `<line x1="${x}" y1="${combH - 26}" x2="${x}" y2="${tall ? 24 : 52}" stroke="#287c9f" stroke-width="${tall ? 2.6 : 1.7}" />
-          <circle cx="${x}" cy="${tall ? 24 : 52}" r="${tall ? 3.5 : 2.5}" fill="#287c9f" />`;
-      });
-      combSvg += `</svg>`;
-
       const specH = 260;
       const fMax = Math.max(fd * 1.15, dfg * 4);
       const spectrumPeak = Math.max(...vm.makeSamples(-dfg, dfg, 90, (f) => vm.spectrumValue(f, params)).map(([, y]) => y), 0.0001);
@@ -98,11 +70,9 @@
       });
       specSvg += `</svg>`;
 
-      const scaleNote = `<dl class="visual-scale"><div><dt>Частота</dt><dd>fд=${fd.toFixed(2)} кГц</dd></div><div><dt>Интервал</dt><dd>Δt=${dt.toFixed(4)} мс</dd></div><div><dt>Запас</dt><dd>fд/(2Δfg)=${alpha.toFixed(2)}</dd></div></dl>`;
+      const scaleNote = `<dl class="visual-scale"><div><dt>Частота</dt><dd>fд=${fd.toFixed(2)} кГц</dd></div><div><dt>Интервал</dt><dd>Δt=${dt.toFixed(4)} мс</dd></div><div><dt>Запас</dt><dd>fд/(2Δfg)=${alpha.toFixed(2)}</dd></div><div><dt>Решётка</dt><dd>δ_T(t) — моменты отсчётов</dd></div></dl>`;
       return `<div class="stage-panel__visuals-stack">
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Отсчёты x(kΔt) через интервал Δt</p>${scaleNote}${svg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Дискретно-аналоговая форма с удержанием отсчёта</p>${scaleNote}${holdSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Дискретизирующая решётка δ_T(t)</p>${scaleNote}${combSvg}</div>
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Спектральные копии после дискретизации</p>${scaleNote}${specSvg}</div>
       </div>`;
     },

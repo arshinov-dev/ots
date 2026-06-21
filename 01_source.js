@@ -239,7 +239,7 @@
       return Math.max(0, value);
     }
 
-    function axes(W, H, yZero, xLabel, yLabel) {
+    function axes(W, H, yZero, xLabel, yLabel, options = {}) {
       const yAxis = clamp(yZero, 18, H - 24);
       let svg = `<rect x="1" y="1" width="${W - 2}" height="${H - 2}" fill="none" stroke="#1f2b26" stroke-width="1.4" />`;
       for (let i = 1; i < 6; i++) {
@@ -256,6 +256,28 @@
         <path d="M -2 10 L 2 0 L 6 10" fill="none" stroke="#1f2b26" stroke-width="1.8" />
         <text x="${W - 36}" y="${Math.max(18, yAxis - 12)}" fill="#31433b" font-family="monospace" font-size="15">${xLabel}</text>
         <text x="14" y="24" fill="#31433b" font-family="monospace" font-size="15">${yLabel}</text>`;
+
+      // Числовые отметки: не больше трёх по каждой оси
+      const { xMin, xMax, yMin, yMax } = options;
+      if (Number.isFinite(xMin) && Number.isFinite(xMax)) {
+        const xPositions = [0, W / 2, W];
+        const xValues = [xMin, (xMin + xMax) / 2, xMax];
+        xPositions.forEach((x, i) => {
+          svg += `<line x1="${x}" y1="${yAxis}" x2="${x}" y2="${yAxis + 5}" stroke="#1f2b26" stroke-width="1.4" />`;
+          svg += `<text x="${x}" y="${yAxis + 18}" fill="#62716b" font-family="monospace" font-size="11" text-anchor="middle">${Number(xValues[i]).toFixed(1)}</text>`;
+        });
+      }
+      if (Number.isFinite(yMin) && Number.isFinite(yMax)) {
+        const yTicks = [
+          { y: H - 6, value: yMin },
+          { y: 10, value: yMax },
+        ];
+        if (yMin < 0 && yMax > 0) yTicks.push({ y: yAxis, value: 0 });
+        yTicks.forEach(({ y, value }) => {
+          svg += `<line x1="0" y1="${y}" x2="5" y2="${y}" stroke="#1f2b26" stroke-width="1.4" />`;
+          svg += `<text x="8" y="${y + 4}" fill="#62716b" font-family="monospace" font-size="11">${Number(value).toFixed(2)}</text>`;
+        });
+      }
       return svg;
     }
 
@@ -281,7 +303,7 @@
     function chartSvg({ W = 1000, H = 210, xMin, xMax, yMin, yMax, xLabel, yLabel, samples, color, width = 2.5, alpha = 1, extra = "" }) {
       const yZero = yMin < 0 && yMax > 0 ? H - ((0 - yMin) / (yMax - yMin)) * H : H - 18;
       let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
-      svg += axes(W, H, yZero, xLabel, yLabel);
+      svg += axes(W, H, yZero, xLabel, yLabel, { xMin, xMax, yMin, yMax });
       svg += drawXYCurve(samples, W, H, xMin, xMax, yMin, yMax, color, width, alpha);
       svg += extra;
       svg += `</svg>`;
@@ -361,7 +383,7 @@
       const sigmaG = Math.sqrt(Pg);
 
       let timeSvg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
-      timeSvg += vm.axes(W, H, yZero, "t", "g(t)");
+      timeSvg += vm.axes(W, H, yZero, "t, мс", "g(t), В", { xMin: 0, xMax: vm.getTimeSpanMs(params), yMin: SignalData.yMin, yMax: SignalData.yMax });
       const yPlus = getY(3 * sigmaG);
       const yMinus = getY(-3 * sigmaG);
       timeSvg += `<line x1="0" y1="${yPlus}" x2="${W}" y2="${yPlus}" stroke="#d5ddd8" stroke-dasharray="8,8" stroke-width="1.5" />`;
@@ -373,7 +395,7 @@
       const corrSamples = vm.makeSamples(-tauMax, tauMax, 220, (tau) => vm.correlationValue(tau, params));
       const corrSvg = vm.chartSvg({
         W, H: 220, xMin: -tauMax, xMax: tauMax, yMin: -Pg * 0.25, yMax: Pg * 1.08,
-        xLabel: "τ", yLabel: "B_c(τ)", samples: corrSamples, color: "#7554aa"
+        xLabel: "τ, мс", yLabel: "B_c(τ), В²", samples: corrSamples, color: "#7554aa"
       });
 
       const fMax = Math.max(dfg * 2.4, beta * 4);
@@ -385,23 +407,16 @@
         <line x1="${dfgX(-dfg)}" y1="28" x2="${dfgX(dfg)}" y2="28" stroke="#e74c3c" stroke-width="1.5" />`;
       const spectrumSvg = vm.chartSvg({
         W, H: 220, xMin: -fMax, xMax: fMax, yMin: 0, yMax: spectrumPeak * 1.1,
-        xLabel: "f", yLabel: "G_g(f)", samples: spectrumSamples, color: "#287c9f", extra: spectrumExtra
+        xLabel: "f, кГц", yLabel: "G_g(f), В²/кГц", samples: spectrumSamples, color: "#287c9f", extra: spectrumExtra
       });
-      const pdfSamples = vm.makeSamples(-4 * sigmaG, 4 * sigmaG, 180, (u) => Math.exp(-u * u / (2 * Pg)) / (sigmaG * Math.sqrt(2 * Math.PI)));
-      const pdfPeak = 1 / (sigmaG * Math.sqrt(2 * Math.PI));
-      const pdfSvg = vm.chartSvg({
-        W, H: 220, xMin: -4 * sigmaG, xMax: 4 * sigmaG, yMin: 0, yMax: pdfPeak * 1.12,
-        xLabel: "u", yLabel: "W_g(u)", samples: pdfSamples, color: "#0c6b4f",
-        extra: `<line x1="${W * 0.125}" y1="18" x2="${W * 0.125}" y2="202" stroke="#e74c3c" stroke-width="1.3" stroke-dasharray="5,6" />
-          <line x1="${W * 0.875}" y1="18" x2="${W * 0.875}" y2="202" stroke="#e74c3c" stroke-width="1.3" stroke-dasharray="5,6" />`
-      });
+      const pdfNote = `<div class="stage-panel__info-box">Одномерная плотность вероятности гауссовского сигнала: \\( W_g(u)=\\dfrac{1}{\\sigma_g\\sqrt{2\\pi}}\\exp\\left(-\\dfrac{u^2}{2\\sigma_g^2}\\right) \\), где \\( \\sigma_g=${sigmaG.toFixed(3)} \\) В.</div>`;
       const sourceScale = `<dl class="visual-scale"><div><dt>Разброс амплитуд</dt><dd>±3σg=±${(3 * sigmaG).toFixed(3)} В</dd></div><div><dt>Полоса сообщения</dt><dd>Δfg=${dfg.toFixed(2)} кГц</dd></div><div><dt>Окно времени</dt><dd>${vm.getTimeSpanMs(params).toFixed(3)} мс</dd></div></dl>`;
 
       return `<div class="stage-panel__visuals-stack">
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Временная диаграмма g(t)</p>${sourceScale}${timeSvg}</div>
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Корреляционная функция B_c(τ)</p>${sourceScale}${corrSvg}</div>
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Энергетический спектр G_g(f)</p>${sourceScale}${spectrumSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Одномерная плотность вероятности W_g(u)</p>${sourceScale}${pdfSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Плотность вероятности W_g(u)</p>${pdfNote}</div>
       </div>`;
     },
 

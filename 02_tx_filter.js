@@ -59,11 +59,6 @@
       timeSvg += drawCurveSVG(SignalData.x_t, '#0c6b4f', 2.8);
       timeSvg += `</svg>`;
 
-      let errorSvg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
-      errorSvg += vm.axes(W, H, yZero, "t", "g(t)-x(t)");
-      errorSvg += drawCurveSVG(SignalData.g_t.map((value, index) => value - SignalData.x_t[index]), '#e74c3c', 2.3, 0.9);
-      errorSvg += `</svg>`;
-
       const fMax = vm.getSpectrumWindow(params).max;
       const Hf = 240;
       const spectrumSamples = vm.makeSamples(-fMax, fMax, 320, (f) => vm.spectrumValue(f, params));
@@ -86,7 +81,6 @@
       return `<div class="stage-panel__visuals-stack">
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Наложение во времени: g(t) и x(t)</p>${legend}${timeSvg}</div>
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Ограничение спектра идеальным ФНЧ</p>${legend}${freqSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Потерянная часть реализации ε_f(t)=g(t)-x(t)</p>${legend}${errorSvg}</div>
       </div>`;
     },
 

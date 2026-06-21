@@ -899,7 +899,7 @@ details.field summary::-webkit-details-marker {
 }
 
 .stage-panel__action {
-  margin: 0 0 10px;
+  margin: 0;
   font-size: 0.88rem;
   line-height: 1.5;
   color: #1f2b26;
@@ -925,13 +925,17 @@ details.field summary::-webkit-details-marker {
   font-weight: 900;
 }
 
-.stage-panel__guide-note,
-.stage-panel__next {
-  margin-top: 14px;
+.stage-panel__guide-note {
+  margin-top: 10px;
   border-radius: var(--radius-sm);
-  padding: 11px 12px;
+  padding: 10px 12px;
   font-size: 0.88rem;
   line-height: 1.55;
+}
+
+.stage-panel__next,
+.learning-points {
+  display: none;
 }
 
 .stage-panel__guide-note {
@@ -1412,8 +1416,8 @@ details.field summary::-webkit-details-marker {
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  padding: 10px 12px;
-  margin: 12px 0 4px;
+  padding: 8px 10px;
+  margin: 8px 0 12px;
   background: linear-gradient(135deg, rgba(40, 124, 159, 0.06), rgba(12, 107, 79, 0.04));
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
@@ -1457,7 +1461,7 @@ details.field summary::-webkit-details-marker {
 
 /* === Блок «Вход → Выход» с классификацией сигналов === */
 .signal-flow-block {
-  padding: 12px 0 4px;
+  padding: 4px 0 6px;
 }
 
 .signal-flow-row {
@@ -1498,7 +1502,7 @@ details.field summary::-webkit-details-marker {
 }
 
 .signal-flow-change {
-  margin: 8px 0 6px;
+  margin: 6px 0 10px;
   font-size: 0.86rem;
   line-height: 1.5;
   color: var(--muted);
@@ -1520,7 +1524,7 @@ details.field summary::-webkit-details-marker {
 
 /* === Блок зависимостей === */
 .dependencies-block {
-  padding: 10px 14px;
+  padding: 8px 12px;
   background: #f7faf8;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);

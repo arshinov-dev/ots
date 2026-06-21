@@ -113,35 +113,6 @@
       const matrixHead = `<tr><th>d</th>${Array.from({ length: levelCount }, (_, i) => `<th>${i + 1}</th>`).join("")}</tr>`;
       const distanceTable = `<div class="distance-table-wrap"><table class="distance-table"><thead>${matrixHead}</thead><tbody>${matrixRows}</tbody></table></div>`;
 
-      const botH = 150;
-      const bitStepX = W / Math.max(1, numBits);
-      let botSvg = `<svg viewBox="0 0 ${W} ${botH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
-      botSvg += `<line x1="0" y1="${botH * 0.5}" x2="${W}" y2="${botH * 0.5}" stroke="#d5ddd8" stroke-width="2" />`;
-      let meanderD = "";
-      for (let i = 0; i < numBits; i++) {
-        const x1 = i * bitStepX, x2 = (i + 1) * bitStepX;
-        const y = SignalData.b_t[i] > 0 ? botH * 0.22 : botH * 0.72;
-        if (i === 0) meanderD += `M ${x1} ${y} `;
-        else {
-          const prevY = SignalData.b_t[i - 1] > 0 ? botH * 0.22 : botH * 0.72;
-          if (prevY !== y) meanderD += `L ${x1} ${prevY} L ${x1} ${y} `;
-        }
-        meanderD += `L ${x2} ${y} `;
-      }
-      botSvg += `<path d="${meanderD}" stroke="#0c6b4f" stroke-width="2.8" fill="none" stroke-linejoin="miter" />`;
-
-      if (numBits >= mu) {
-        const sampleWidth = bitStepX * mu;
-        botSvg += `<line x1="0" y1="${botH - 28}" x2="${sampleWidth}" y2="${botH - 28}" stroke="#e74c3c" stroke-width="2" />
-          <path d="M 7 ${botH - 33} L 0 ${botH - 28} L 7 ${botH - 23}" fill="none" stroke="#e74c3c" stroke-width="2" />
-          <path d="M ${sampleWidth - 7} ${botH - 33} L ${sampleWidth} ${botH - 28} L ${sampleWidth - 7} ${botH - 23}" fill="none" stroke="#e74c3c" stroke-width="2" />`;
-        for (let i = 1; i < mu; i++) {
-          const x = i * bitStepX;
-          botSvg += `<line x1="${x}" y1="10" x2="${x}" y2="${botH - 16}" stroke="rgba(98,113,107,0.28)" stroke-dasharray="4,7" />`;
-        }
-      }
-      botSvg += `</svg>`;
-
       const zoom = window.VisualMath.getZoomWindow(SignalData, 5);
       const zoomH = 150;
       const zoomBitW = W / Math.max(1, zoom.length);
@@ -204,18 +175,19 @@
         <text x="${W * 0.56 + barW / 2}" y="${probH - 8}" fill="#62716b" font-family="monospace" font-size="14" text-anchor="middle">1</text>
         <line x1="${W * 0.16}" y1="${probH - 24 - 0.5 * (probH - 46)}" x2="${W * 0.86}" y2="${probH - 24 - 0.5 * (probH - 46)}" stroke="#e74c3c" stroke-width="1.6" stroke-dasharray="6,6" />`;
       probSvg += `</svg>`;
-      const timingScale = `<dl class="visual-scale"><div><dt>Отсчёт</dt><dd>Δt=${dt.toFixed(4)} мс</dd></div><div><dt>Символ</dt><dd>τсим=${tauSim.toFixed(4)} мс</dd></div><div><dt>Код</dt><dd>${mu} бит на один уровень</dd></div></dl>`;
-      const zoomScale = `<dl class="visual-scale"><div><dt>Окно</dt><dd>биты ${zoom.start + 1}-${zoom.end}</dd></div><div><dt>Назначение</dt><dd>это же окно используется в блоках 06-08</dd></div></dl>`;
+      const zoomScale = `<dl class="visual-scale"><div><dt>Окно</dt><dd>биты ${zoom.start + 1}-${zoom.end}</dd></div><div><dt>Отсчёт</dt><dd>Δt=${dt.toFixed(4)} мс</dd></div><div><dt>Символ</dt><dd>τсим=${tauSim.toFixed(4)} мс</dd></div><div><dt>Код</dt><dd>${mu} бит на один уровень</dd></div></dl>`;
       const spectrumScale = `<dl class="visual-scale"><div><dt>Огибающая</dt><dd>sin x / x</dd></div><div><dt>Первый ноль</dt><dd>1/τсим=${(1 / tauSim).toFixed(2)} кГц</dd></div><div><dt>Расчетная полоса</dt><dd>Δfц=${(2 / tauSim).toFixed(2)} кГц</dd></div></dl>`;
       const probScale = `<dl class="visual-scale"><div><dt>p(0)</dt><dd>${p0.toFixed(4)}</dd></div><div><dt>p(1)</dt><dd>${p1.toFixed(4)}</dd></div><div><dt>Ожидание</dt><dd>для симметричного гауссовского входа близко к 0.5</dd></div></dl>`;
 
+      const codeTableCollapsible = `<details class="visual-step"><summary class="visual-step__summary"><span>Таблица</span><strong>Показать таблицу кодов</strong></summary><div class="visual-step__body">${codeTable}</div></details>`;
+      const distanceTableCollapsible = `<details class="visual-step"><summary class="visual-step__summary"><span>Матрица</span><strong>Показать матрицу расстояний</strong></summary><div class="visual-step__body">${distanceTable}</div></details>`;
+
       return `<div class="stage-panel__visuals-stack">
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Маппинг квантованных уровней в ${mu}-битные коды</p>${codeStrip}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Полная таблица безызбыточного блочного кода</p>${codeTable}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Матрица кодовых расстояний d_lm</p>${distanceTable}</div>
+        <div class="stage-panel__visuals-layer">${codeTableCollapsible}</div>
+        <div class="stage-panel__visuals-layer">${distanceTableCollapsible}</div>
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Априорные вероятности битов p(0) и p(1)</p>${probScale}${probSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Цифровой меандр b(t): ${mu} символов τсим на один Δt</p>${timingScale}${botSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Синхронная лупа: этот же фрагмент используют блоки 06–08</p>${zoomScale}${zoomSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Цифровой меандр b(t): ${mu} символов τсим на один Δt</p>${zoomScale}${zoomSvg}</div>
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Амплитудный спектр прямоугольного цифрового сигнала</p>${spectrumScale}${specSvg}</div>
       </div>`;
     },

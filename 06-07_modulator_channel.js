@@ -198,30 +198,6 @@
             const bitStepX = W / Math.max(1, zoom.length);
             const xOfIndex = (index) => ((index - zoom.startIdx) / Math.max(1, zoom.endIdx - zoom.startIdx)) * W;
 
-            // Верхний график: бледный цифровой меандр b(t)
-            let modTopH = 60;
-            let modTopSVG = `<svg viewBox="0 0 ${W} ${modTopH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
-            let paleMeanderD = "";
-            for (let i = 0; i < zoom.length; i++) {
-                let x1 = i * bitStepX, x2 = (i + 1) * bitStepX;
-                let bit = zoom.bits[i];
-                let y = bit > 0 ? modTopH * 0.2 : modTopH * 0.8;
-                if (i === 0) paleMeanderD += `M ${x1} ${y} `;
-                else {
-                    let prevY = zoom.bits[i - 1] > 0 ? modTopH * 0.2 : modTopH * 0.8;
-                    if (prevY !== y) paleMeanderD += `L ${x1} ${prevY} L ${x1} ${y} `;
-                }
-                paleMeanderD += `L ${x2} ${y} `;
-                modTopSVG += `<line x1="${x1}" y1="0" x2="${x1}" y2="${modTopH}" stroke="rgba(98,113,107,0.22)" stroke-dasharray="3,7" />`;
-            }
-            modTopSVG += `<path d="${paleMeanderD}" stroke="#0c6b4f" stroke-width="2" fill="none" stroke-opacity="0.3" stroke-linejoin="round" />`;
-            modTopSVG += `<line x1="${W}" y1="0" x2="${W}" y2="${modTopH}" stroke="rgba(98,113,107,0.22)" stroke-dasharray="3,7" />`;
-            modTopSVG += `</svg>`;
-
-            // Нижний график: радиоволна S(t)
-            let modBotH = 190, modBotY0 = modBotH / 2;
-            let modBotSVG = `<svg viewBox="0 0 ${W} ${modBotH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
-            modBotSVG += `<line x1="0" y1="${modBotY0}" x2="${W}" y2="${modBotY0}" stroke="#d5ddd8" stroke-width="2" />`;
             let maxS = SignalData.zMax || Math.max(SignalData.Um * 1.5, ...SignalData.S_t.map(Math.abs));
             if (maxS === 0) maxS = 1;
             const rowH = 72;
@@ -283,16 +259,8 @@
               oscSvg += `<text x="${W - 18}" y="${rowCenter(2) - 18}" fill="#31433b" font-family="monospace" font-size="13" text-anchor="end">смена фазы при 0</text>`;
             }
             oscSvg += `</svg>`;
-            let sD = `M 0 ${modBotY0 - (SignalData.S_t[zoom.startIdx] / maxS) * (modBotH * 0.4)}`;
-            for (let i = zoom.startIdx; i <= zoom.endIdx; i++) sD += ` L ${xOfIndex(i)} ${modBotY0 - (SignalData.S_t[i] / maxS) * (modBotH * 0.4)}`;
-            for (let i = 0; i <= zoom.length; i++) {
-                let x = i * bitStepX;
-                modBotSVG += `<line x1="${x}" y1="0" x2="${x}" y2="${modBotH}" stroke="rgba(98,113,107,0.15)" stroke-dasharray="3,8" />`;
-            }
-            modBotSVG += `<path d="${sD}" stroke="#287c9f" stroke-width="2.5" fill="none" stroke-linejoin="round" />`;
-            modBotSVG += `</svg>`;
-            const bitScale = `<dl class="visual-scale"><div><dt>Окно</dt><dd>биты ${zoom.start + 1}-${zoom.end}</dd></div><div><dt>Управление</dt><dd>${params.modulation === "DAM" ? "бит меняет амплитуду" : params.modulation === "DCHM" ? "бит выбирает f1 или f2" : "бит меняет относительную фазу"}</dd></div></dl>`;
-            const scaleNote = `<dl class="visual-scale"><div><dt>Общий масштаб радиотракта</dt><dd>ось Y: ±${maxS.toFixed(4)} В, как в канале и детекторе</dd></div><div><dt>Амплитуда</dt><dd>U_m=${(SignalData.Um || 0).toFixed(4)} В</dd></div></dl>`;
+            const bitScale = `<dl class="visual-scale"><div><dt>Окно</dt><dd>биты ${zoom.start + 1}-${zoom.end}</dd></div><div><dt>Управление</dt><dd>${params.modulation === "DAM" ? "бит меняет амплитуду" : params.modulation === "DCHM" ? "бит выбирает f1 или f2" : "бит меняет относительную фазу"}</dd></div><div><dt>Амплитуда</dt><dd>U_m=${(SignalData.Um || 0).toFixed(4)} В</dd></div></dl>`;
+            const visualNote = `<p class="stage-panel__info-box stage-panel__info-box--ok">${window.RadioMath.getVisualFrequencyNote(params)}</p>`;
             const symbolRows = (SignalData.modulation_symbols || []).slice(zoom.start, zoom.end).map((symbol, index) => {
               const shownBit = symbol.bit > 0 ? "1" : "0";
               const phasePi = symbol.phase / Math.PI;
@@ -340,10 +308,8 @@
             specSvg += `</svg>`;
             const spectrumScale = `<dl class="visual-scale"><div><dt>Полоса</dt><dd>Δfs=${(SignalData.df_s || 0).toFixed(2)} кГц</dd></div><div><dt>Цифровой спектр</dt><dd>Δfц=${window.RadioMath.getDigitalBandwidth(params).toFixed(2)} кГц</dd></div><div><dt>Несущая</dt><dd>${params.modulation === "DCHM" ? "f2/f1" : "f0"}</dd></div></dl>`;
             return `<div class="stage-panel__visuals-stack">
-              <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Учебная осциллограмма дискретной манипуляции</p>${bitScale}${oscSvg}</div>
-              <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Цифровой сигнал b(t)</p>${bitScale}${modTopSVG}</div>
+              <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Учебная осциллограмма дискретной манипуляции</p>${bitScale}${oscSvg}${visualNote}</div>
               <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Закон манипуляции в выбранном окне</p>${symbolTable}</div>
-              <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Радиосигнал S(t)</p>${scaleNote}${modBotSVG}</div>
               <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Амплитудный спектр сигнала дискретной модуляции</p>${spectrumScale}${specSvg}</div>
             </div>`;
         },
@@ -480,7 +446,9 @@
 
             const scaleNote = `<dl class="visual-scale"><div><dt>Общий масштаб</dt><dd>все три графика: ±${maxZ.toFixed(4)} В</dd></div><div><dt>Окно</dt><dd>биты ${zoom.start + 1}-${zoom.end}</dd></div></dl>`;
             const noiseScale = `<dl class="visual-scale"><div><dt>σш</dt><dd>${sigma.toFixed(4)} В</dd></div><div><dt>Pш</dt><dd>${(SignalData.P_sh || 0).toFixed(6)} Вт</dd></div><div><dt>Модель</dt><dd>n(t)=Nшc cosωt + Nшs sinωt</dd></div></dl>`;
+            const channelScheme = `<dl class="visual-scale"><div><dt>Модель канала</dt><dd>S(t) → χS(t) + n(t) → z(t)</dd></div><div><dt>χ</dt><dd>не задан в варианте, в расчётах принято χ = 1</dd></div></dl>`;
             return `<div class="stage-panel__visuals-stack">
+                <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Модель непрерывного канала связи</p>${channelScheme}</div>
                 <div class="stage-panel__visuals-layer">
                     <p class="stage-panel__visuals-header"><strong style="color:#287c9f">Идеальный сигнал S(t)</strong></p>
                     ${scaleNote}${sSVG}
