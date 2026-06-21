@@ -70,6 +70,7 @@
             levelCount,
             probabilities: SignalData.level_probabilities,
             pError: SignalData.p_err_val || 0,
+            mu,
           })
         : null;
       if (tnResult) {
@@ -172,8 +173,11 @@
         formulas += `<div class="stage-panel__info-box stage-panel__info-box--ok">Ошибок в битах не обнаружено.</div>`;
       }
       const tnCoeffText = tnCoeff.toFixed(4).replace(".", "{,}");
+      const pAvgError = tnMeta?.pAvgError || 0;
+      const pAvgErrorText = pAvgError.toExponential(4).replace(".", "{,}");
+      formulas += `<div class="formula-preview"><span>Усреднённая вероятность ошибки (формула 42)</span>\\[ \\overline{p}_{ош}=\\frac{1}{L+1}\\left(1-(1-p_{ош})^{\\mu}\\right)=\\frac{1}{${levelCount}}\\left(1-(1-${pErr.toExponential(3).replace(".", "{,}")})^{${mu}}\\right)\\approx ${pAvgErrorText} \\]</div>`;
       formulas += `<div class="formula-preview"><span>Аналитический шум передачи (по методичке, формулы 39-42)</span>\\[ \\xi_p^2=\\left(\\frac{2}{\\pi}\\text{Si}(\\pi)-1\\right)\\Delta U^2\\overline{p}_{ош}\\sum_{i=1}^{L+1}p_i\\sum_{j=1}^{L+1}(j-i)^2 \\]</div>`;
-      formulas += `<div class="formula-preview"><span>Подстановка чисел варианта</span>\\[ \\xi_p^2=${tnCoeffText}\\cdot ${toLatexNumber(dU.toFixed(3))}^2\\cdot ${pErr.toExponential(3).replace(".", "{,}")}\\cdot ${toLatexNumber(tnSumTransitions.toFixed(3))}\\approx ${toLatexNumber(xiAnalytic.toFixed(6))}\\text{ В}^2 \\]</div>`;
+      formulas += `<div class="formula-preview"><span>Подстановка чисел варианта</span>\\[ \\xi_p^2=${tnCoeffText}\\cdot ${toLatexNumber(dU.toFixed(3))}^2\\cdot ${pAvgErrorText}\\cdot ${toLatexNumber(tnSumTransitions.toFixed(3))}\\approx ${toLatexNumber(xiAnalytic.toFixed(6))}\\text{ В}^2 \\]</div>`;
       formulas += `<div class="stage-panel__info-box"><strong>Связь с графиком:</strong><br>Бледная ступенька показывает исходные уровни из квантователя, зелёный контур — восстановленные уровни. Красная заливка показывает конкретные отклонения на этом прогоне. Коэффициент \\((2/\\pi)\\text{Si}(\\pi)-1\\approx${tnCoeffText}\\) учитывает фильтрацию шума идеальным ФНЧ на выходе ЦАП; сумма \\(\\sum p_i\\sum(j-i)^2\\) берётся по всем уровням, как в методичке.</div>`;
       return { theory, formulas };
     }

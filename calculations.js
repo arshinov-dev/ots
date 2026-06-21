@@ -274,17 +274,26 @@
   //   Si(π) = ∫₀^π sin(t)/t dt ≈ 1.85194
   //   Коэффициент (2/π)·Si(π) - 1 ≈ 0.179 (в коде/студенте: 0.1777)
   //   Σⱼ (j-i)² — сумма по ВСЕМ j от 1 до L+1 (не только однократные ошибки)
-  //   p̄ош — усреднённая вероятность битовой ошибки
+  //   p̄ош — усреднённая вероятность ошибки по уровням (формула 42):
+  //     p̄ош = (1/(L+1)) · (1 - (1-p_ош)^μ)
+  //   где μ — разрядность кода, L+1 — число уровней.
 
   function computeTransmissionNoise(opts) {
     const dU = opts.stepSize;
     const levelCount = opts.levelCount; // L+1
     const probabilities = opts.probabilities || [];
-    const pError = opts.pError || 0;
+    const pError = opts.pError || 0; // p_ош — вероятность битовой ошибки
+    const mu = opts.mu || Math.log2(levelCount); // разрядность кода
 
     // Коэффициент из методички: (2/π)·Si(π) - 1
     const SiPi = sineIntegral(Math.PI);
     const coefficient = (2 / Math.PI) * SiPi - 1;
+
+    // Усреднённая вероятность ошибки по уровням (формула 42):
+    // p̄_ош = (1/(L+1)) · (1 - (1-p_ош)^μ)
+    // Вероятность правильного приёма кодового слова из μ битов = (1-p_ош)^μ
+    const pCorrectWord = Math.pow(1 - pError, mu);
+    const pAvgError = (1 / levelCount) * (1 - pCorrectWord);
 
     // Σᵢ pᵢ Σⱼ (j-i)²  — сумма по всем уровням (1-indexed в методичке)
     // В коде индексы 0-based, переводим: j_code = j_method - 1, i_code = i_method - 1
@@ -299,16 +308,20 @@
       sumTransitions += pi * innerSum;
     }
 
-    const xiP = coefficient * dU * dU * pError * sumTransitions;
+    const xiP = coefficient * dU * dU * pAvgError * sumTransitions;
 
     return {
       value: Number.isFinite(xiP) ? xiP : 0,
       coefficient,
       coefficientApprox: 0.1777, // значение из студенческого примера
+      pAvgError,
+      pBitError: pError,
+      mu,
       sumTransitions,
       formulaId: "transmission-noise-methodical",
       latex: "\\xi_p^2=\\left(\\frac{2}{\\pi}\\text{Si}(\\pi)-1\\right)\\Delta U^2\\overline{p}_{ош}\\sum_{i=1}^{L+1}p_i\\sum_{j=1}^{L+1}(j-i)^2",
-      inputs: { stepSize: dU, levelCount, pError, sumTransitions },
+      latexPAvgError: "\\overline{p}_{ош}=\\frac{1}{L+1}\\left(1-(1-p_{ош})^{\\mu}\\right)",
+      inputs: { stepSize: dU, levelCount, pError, mu, pAvgError, sumTransitions },
     };
   }
 

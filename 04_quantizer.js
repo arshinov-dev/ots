@@ -44,7 +44,28 @@
       }, []);
       SignalData.quantized_power_analytic = SignalData.level_probabilities.reduce((acc, p, index) => acc + p * Math.pow(levels[index], 2), 0);
       SignalData.quantization_eta = window.VisualMath.getEta(params);
-      SignalData.quantization_error_analytic_sq = Math.pow(dU, 2) / 12;
+      // === Шум квантования по методичке (формулы 7-10) ===
+      // Формула 10: ξ_кв² = P_x(1 - 2γ) + P_y
+      // где P_x = P_g (мощность входного сигнала),
+      //   P_y = P_v = Σ v_i² p_i (мощность квантованного сигнала),
+      //   γ = Δu · Σ W_g(u_i) для i=1..L (формула 9),
+      //   W_g(x) — ФПВ гауссовского распределения.
+      const Px = parseFloat(params.signalPower) || 1.5;
+      const Py = SignalData.quantized_power_analytic;
+      const sigmaG = Math.sqrt(Px);
+      // γ = ΔU · Σ W_g(u_i), i=1..L (по порогам)
+      const wg = (x) => Math.exp(-x * x / (2 * sigmaG * sigmaG)) / (sigmaG * Math.sqrt(2 * Math.PI));
+      let gamma = 0;
+      for (let i = 0; i < thresholdCount; i++) gamma += wg(thresholds[i]);
+      gamma *= dU;
+      SignalData.quantization_gamma = gamma;
+      SignalData.quantization_Px = Px;
+      SignalData.quantization_Py = Py;
+      SignalData.quantization_Bxv = gamma * Px;
+      // Основной расчёт по методичке (формула 10)
+      SignalData.quantization_error_analytic_sq = Px * (1 - 2 * gamma) + Py;
+      // Приближённая оценка ΔU²/12 (для сравнения)
+      SignalData.quantization_error_approx_sq = Math.pow(dU, 2) / 12;
       SignalData.quantization_step = dU;
     },
 
@@ -161,8 +182,12 @@
     renderTheory: function(stage, params, toLatexNumber, SignalData) {
       const { sigmaG, thresholdCount, levelCount, mu, Dg, dU, deltaU1, conditionalStep } = getQuantizerParams(params);
       const eta = SignalData.quantization_eta || window.VisualMath.getEta(params);
-      const eps = SignalData.quantization_error_analytic_sq || Math.pow(dU, 2) / 12;
+      const eps = SignalData.quantization_error_analytic_sq || 0;
+      const epsApprox = SignalData.quantization_error_approx_sq || Math.pow(dU, 2) / 12;
       const Py = SignalData.quantized_power_analytic || 0;
+      const gamma = SignalData.quantization_gamma || 0;
+      const Px = SignalData.quantization_Px || (parseFloat(params.signalPower) || 1.5);
+      const Bxv = SignalData.quantization_Bxv || 0;
       const meta = window.VisualMath.getCorrelationMeta(params);
       let theory = "Квантователь заменяет каждый амплитудный отсчёт ближайшим разрешённым уровнем. Красные отрезки показывают шум квантования, а гистограмма показывает, какие уровни выбираются чаще.";
       let formulas = `<div class="formula-preview"><span>Динамический диапазон</span>\\[ D_g = u_L-u_1=6\\sigma_g = 6 \\cdot ${toLatexNumber(sigmaG.toFixed(3))} = ${toLatexNumber(Dg.toFixed(3))} \\text{ В} \\]</div>`;
@@ -170,8 +195,12 @@
       formulas += `<div class="formula-preview"><span>Допустимый условный шаг</span>\\[ \\Delta u_1=\\sqrt{\\frac{P_g}{2}}=${toLatexNumber(deltaU1.toFixed(3))}\\text{ В},\\quad \\Delta u_{усл}=\\frac{\\Delta u_1}{\\eta}=\\frac{${toLatexNumber(deltaU1.toFixed(3))}}{${toLatexNumber(eta.toFixed(3))}}=${toLatexNumber(conditionalStep.toFixed(3))}\\text{ В} \\]</div>`;
       formulas += `<div class="formula-preview"><span>Разрядность, пороги и выходные уровни</span>\\[ \\mu=\\left\\lceil\\log_2\\left(\\frac{6\\sigma_g}{\\Delta u_{усл}}+2\\right)\\right\\rceil=${mu} \\]\\[ L=2^\\mu-1=${thresholdCount},\\quad L+1=${levelCount} \\]\\[ \\Delta U = \\frac{6\\sigma_g}{L-1}=\\frac{${toLatexNumber(Dg.toFixed(3))}}{${thresholdCount - 1}}=${toLatexNumber(dU.toFixed(3))}\\text{ В} \\]\\[ u_i=-3\\sigma_g+(i-1)\\Delta U,\\quad v_j=-3\\sigma_g+(j-1{,}5)\\Delta U \\]</div>`;
       formulas += `<div class="formula-preview"><span>Вероятности уровней и интегральное распределение</span>\\[ p_j = \\Phi\\left(\\frac{u_j}{\\sigma_g}\\right)-\\Phi\\left(\\frac{u_{j-1}}{\\sigma_g}\\right),\\quad F_j=\\sum_{i=1}^{j}p_i \\]\\[ P_y=\\sum_{j=1}^{${levelCount}}v_j^2p_j\\approx ${toLatexNumber(Py.toFixed(4))} \\text{ В}^2 \\]</div>`;
-      formulas += `<div class="formula-preview"><span>Аналитическая мощность шума квантования</span>\\[ \\varepsilon_{кв}^2 \\approx \\frac{\\Delta U^2}{12} = \\frac{${toLatexNumber(dU.toFixed(3))}^2}{12} \\approx ${toLatexNumber(eps.toFixed(4))} \\text{ В}^2 \\]</div>`;
-      formulas += `<div class="stage-panel__info-box"><strong>Связь с графиком:</strong><br>Серые пунктирные линии — пороги \\(u_i\\), зеленые горизонтали — выходные уровни \\(v_j\\). Столбцы \\(p_j\\) и линия \\(F_j\\) пересчитываются из гауссовского закона при каждом изменении \\(P_g\\).</div>`;
+      // Основной расчёт шума квантования по методичке (формулы 7-10)
+      formulas += `<div class="formula-preview"><span>Шум квантования по методичке (формулы 7–10)</span>\\[ \\varepsilon_{кв}^2=P_x-2B_{xv}+P_v=P_x(1-2\\gamma)+P_y \\]</div>`;
+      formulas += `<div class="formula-preview"><span>Коэффициент взаимной корреляции (формулы 8–9)</span>\\[ B_{xv}=\\gamma\\sigma_x^2=\\gamma P_x,\\quad \\gamma=\\Delta U\\sum_{i=1}^{L}W_g(u_i)\\approx ${toLatexNumber(gamma.toFixed(4))} \\]</div>`;
+      formulas += `<div class="formula-preview"><span>Подстановка чисел варианта</span>\\[ \\varepsilon_{кв}^2=${toLatexNumber(Px.toFixed(4))}(1-2\\cdot${toLatexNumber(gamma.toFixed(4))})+${toLatexNumber(Py.toFixed(4))}=${toLatexNumber(eps.toFixed(4))}\\text{ В}^2 \\]</div>`;
+      formulas += `<div class="formula-preview"><span>Приближённая оценка (для сравнения)</span>\\[ \\varepsilon_{кв,\\text{прибл}}^2\\approx\\frac{\\Delta U^2}{12}=\\frac{${toLatexNumber(dU.toFixed(3))}^2}{12}\\approx ${toLatexNumber(epsApprox.toFixed(4))}\\text{ В}^2 \\]</div>`;
+      formulas += `<div class="stage-panel__info-box"><strong>Связь с графиком:</strong><br>Серые пунктирные линии — пороги \\(u_i\\), зеленые горизонтали — выходные уровни \\(v_j\\). Столбцы \\(p_j\\) и линия \\(F_j\\) пересчитываются из гауссовского закона при каждом изменении \\(P_g\\). Основной расчёт \\(\\varepsilon_{кв}^2\\) использует \\(P_x\\), \\(P_y\\) и \\(\\gamma\\) по формулам 7–10 методички.</div>`;
       return { theory, formulas };
     }
   };

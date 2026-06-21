@@ -374,6 +374,10 @@
             const power = window.RadioMath.getPowerParams(params);
             const noiseSigma = power.sigmaNoise;
             SignalData.noiseSigma = noiseSigma;
+            // Методичка: z(t) = χS(t) + n(t). В индивидуальных вариантах χ не задаётся,
+            // поэтому в численной модели принято χ = 1 (линия без дополнительного ослабления).
+            const chi = 1;
+            SignalData.channel_chi = chi;
 
             SignalData.n_t = new Array(N).fill(0);
             SignalData.z_t = new Array(N).fill(0);
@@ -381,7 +385,7 @@
             for (let i = 0; i < N; i++) {
                 let noise = window.VisualMath.deterministicNormal(i, Math.round(power.h2 * 100) + String(params.modulation || "").length);
                 SignalData.n_t[i] = noise * noiseSigma;
-                SignalData.z_t[i] = SignalData.S_t[i] + SignalData.n_t[i];
+                SignalData.z_t[i] = chi * SignalData.S_t[i] + SignalData.n_t[i];
             }
             SignalData.zMax = Math.max(...SignalData.z_t.map(Math.abs), 1.5 * SignalData.Um);
             SignalData.noise_quadrature = new Array(N).fill(0).map((_, i) => window.VisualMath.deterministicNormal(i, 91) * noiseSigma);
@@ -508,7 +512,8 @@
             const power = window.RadioMath.getPowerParams(params);
             const zMax = SignalData.zMax || 0;
             let theory = "На вход приёмника поступает смесь полезного сигнала и аддитивного белого гауссовского шума (АБГШ). Канал вносит случайные флуктуации, искажающие форму сигнала.";
-            let formulas = `<div class="formula-preview"><span>Модель принимаемого сигнала</span>\\[ z(t) = S(t) + n(t) \\]</div>`;
+            let formulas = `<div class="formula-preview"><span>Модель принимаемого сигнала</span>\\[ z(t) = \\chi S(t) + n(t) \\]</div>`;
+            formulas += `<div class="stage-panel__info-box"><strong>Коэффициент ослабления:</strong><br>В методичке \\(z(t)=\\chi S(t)+n(t)\\), где \\(\\chi<1\\) учитывает затухание в линии. Поскольку в индивидуальных вариантах \\(\\chi\\) не задаётся, в численной модели принято \\(\\chi=1\\) — линия без дополнительного ослабления.</div>`;
             formulas += `<div class="formula-preview"><span>Узкополосная гауссовская помеха</span>\\[ n(t)=N_{шc}(t)\\cos\\omega_ш t+N_{шs}(t)\\sin\\omega_ш t,\\quad \\sigma_{Nшc}^2=\\sigma_{Nшs}^2=P_ш \\]</div>`;
             formulas += `<div class="formula-preview"><span>СКО шума</span>\\[ \\sigma_ш = \\sqrt{P_ш} = \\sqrt{${toLatexNumber(power.P_sh.toFixed(6))}} = ${toLatexNumber(power.sigmaNoise.toFixed(4))}\\text{ В} \\]</div>`;
             formulas += `<div class="formula-preview"><span>Пропускная способность НКС</span>\\[ C=\\Delta f_s\\log_2(1+h^2)=${toLatexNumber(power.df_s.toFixed(2))}\\log_2(1+${toLatexNumber(power.h2)})=${toLatexNumber(power.capacity.toFixed(2))}\\text{ кбит/с} \\]</div>`;
