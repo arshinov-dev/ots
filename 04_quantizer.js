@@ -70,32 +70,60 @@
     },
 
     renderSVG: function(id, params, helpers, SignalData) {
-      const { W, H, getY, getX, yZero, drawStemsSVG } = helpers;
+      const { W, H, yZero } = helpers;
       const { sigmaG, thresholdCount, levelCount, mu, Dg, dU, thresholds, levels } = getQuantizerParams(params);
+      const vm = window.VisualMath;
+      const visibleCount = Math.min(16, SignalData.quantized_indices.length);
+      const dynamicWindow = vm.chooseDynamicWindow(SignalData.quantized_indices, {
+        minLength: Math.min(10, visibleCount),
+        length: visibleCount
+      });
+      const visibleOriginal = SignalData.sampled_x_values.slice(dynamicWindow.start, dynamicWindow.end);
+      const visibleQuantized = SignalData.quantized_v.slice(dynamicWindow.start, dynamicWindow.end);
+      const visibleIndices = SignalData.quantized_indices.slice(dynamicWindow.start, dynamicWindow.end);
+      const xAt = (index) => visibleOriginal.length > 1 ? (index / (visibleOriginal.length - 1)) * W : W / 2;
+      const yAt = (value) => H - ((value - SignalData.yMin) / (SignalData.yMax - SignalData.yMin)) * H;
 
       let timeSvg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
-      timeSvg += window.VisualMath.axes(W, H, yZero, "t", "u");
-      thresholds.forEach((threshold, index) => {
-        const y = getY(threshold);
-        const isBorder = index === 0 || index === thresholds.length - 1;
-        timeSvg += `<line x1="0" y1="${y}" x2="${W}" y2="${y}" stroke="${isBorder ? "rgba(231,76,60,0.5)" : "rgba(98,113,107,0.24)"}" stroke-width="${isBorder ? 1.8 : 1.1}" stroke-dasharray="${isBorder ? "8,8" : "4,8"}" />`;
+      timeSvg += vm.axes(W, H, yZero, "k", "u, В", {
+        xMin: dynamicWindow.start + 1,
+        xMax: dynamicWindow.end,
+        yMin: SignalData.yMin,
+        yMax: SignalData.yMax
+      });
+      thresholds.forEach((threshold) => {
+        const y = yAt(threshold);
+        timeSvg += `<line x1="0" y1="${y}" x2="${W}" y2="${y}" stroke="rgba(98,113,107,0.22)" stroke-width="1" stroke-dasharray="4,8" />`;
       });
       levels.forEach((lvl) => {
-        const y = getY(lvl);
-        timeSvg += `<line x1="0" y1="${y}" x2="${W}" y2="${y}" stroke="rgba(12,107,79,0.22)" stroke-width="1.2" />`;
+        const y = yAt(lvl);
+        timeSvg += `<line x1="0" y1="${y}" x2="${W}" y2="${y}" stroke="rgba(12,107,79,0.20)" stroke-width="1.1" />`;
       });
-      timeSvg += drawStemsSVG(SignalData.sampled_x_indices, SignalData.sampled_x_values, '#0c6b4f', 0.14);
-      for (let i = 0; i < SignalData.sampled_x_indices.length; i++) {
-        const x = getX(SignalData.sampled_x_indices[i]);
-        const yOrig = getY(SignalData.sampled_x_values[i]);
-        const yQuant = getY(SignalData.quantized_v[i]);
-        const yTop = Math.min(yOrig, yQuant);
-        const h = Math.max(2, Math.abs(yOrig - yQuant));
-        timeSvg += `<rect x="${x - 3}" y="${yTop}" width="6" height="${h}" fill="rgba(231, 76, 60, 0.32)" />
-          <line x1="${x}" y1="${yOrig}" x2="${x}" y2="${yQuant}" stroke="#e74c3c" stroke-width="2.2" />
-          <path d="M ${x - 4} ${yQuant + (yOrig > yQuant ? 6 : -6)} L ${x} ${yQuant} L ${x + 4} ${yQuant + (yOrig > yQuant ? 6 : -6)}" fill="none" stroke="#e74c3c" stroke-width="2" stroke-linejoin="round" />`;
+      visibleOriginal.forEach((value, index) => {
+        const x = xAt(index);
+        const yOrig = yAt(value);
+        const yQuant = yAt(visibleQuantized[index]);
+        const halfSegment = Math.max(7, W / Math.max(1, visibleOriginal.length) * 0.28);
+        timeSvg += `<line x1="${x}" y1="${yZero}" x2="${x}" y2="${yOrig}" stroke="#287c9f" stroke-width="1.6" stroke-opacity="0.65" />
+          <circle cx="${x}" cy="${yOrig}" r="3.4" fill="#287c9f" />
+          <line x1="${x - halfSegment}" y1="${yQuant}" x2="${x + halfSegment}" y2="${yQuant}" stroke="#0c6b4f" stroke-width="3.4" />
+          <circle cx="${x}" cy="${yQuant}" r="3.1" fill="#0c6b4f" />
+          <line x1="${x}" y1="${yOrig}" x2="${x}" y2="${yQuant}" stroke="#e74c3c" stroke-width="2" />`;
+      });
+      const nearestZeroLevel = levels.reduce((best, value, index) => Math.abs(value) < Math.abs(levels[best]) ? index : best, 0);
+      const nextLevelIndex = Math.min(levels.length - 1, nearestZeroLevel + 1);
+      if (nextLevelIndex !== nearestZeroLevel) {
+        const bracketX = W - 70;
+        const y1 = yAt(levels[nearestZeroLevel]);
+        const y2 = yAt(levels[nextLevelIndex]);
+        timeSvg += `<line x1="${bracketX}" y1="${y1}" x2="${bracketX}" y2="${y2}" stroke="#e74c3c" stroke-width="1.6" />
+          <line x1="${bracketX - 5}" y1="${y1}" x2="${bracketX + 5}" y2="${y1}" stroke="#e74c3c" stroke-width="1.6" />
+          <line x1="${bracketX - 5}" y1="${y2}" x2="${bracketX + 5}" y2="${y2}" stroke="#e74c3c" stroke-width="1.6" />
+          <text class="plot-note" x="${bracketX + 8}" y="${(y1 + y2) / 2 + 4}">ΔU</text>`;
       }
-      timeSvg += drawStemsSVG(SignalData.sampled_x_indices, SignalData.quantized_v, '#0c6b4f');
+      timeSvg += `<text class="plot-note" x="${W - 10}" y="${yAt(3 * sigmaG) - 5}" text-anchor="end">+3σ</text>
+        <text class="plot-note" x="${W - 10}" y="${yZero - 5}" text-anchor="end">0</text>
+        <text class="plot-note" x="${W - 10}" y="${yAt(-3 * sigmaG) - 5}" text-anchor="end">−3σ</text>`;
       timeSvg += `</svg>`;
 
       const stairH = 260;
@@ -167,11 +195,12 @@
       }).join("");
       const table = `<div class="quant-table-wrap"><table class="quant-table"><thead><tr><th>j</th><th>интервал x(kΔt)</th><th>v_j, В</th><th>p_j</th><th>F_j</th></tr></thead><tbody>${levelRows}</tbody></table></div>`;
 
-      const scaleNote = `<dl class="visual-scale"><div><dt>Диапазон</dt><dd>Dg=6σg=${Dg.toFixed(3)} В</dd></div><div><dt>Шаг</dt><dd>ΔU=${dU.toFixed(3)} В</dd></div><div><dt>Сетка</dt><dd>${thresholdCount} порогов, ${levelCount} уровней, μ=${mu}</dd></div></dl>`;
+      const usedLevelCount = new Set(visibleIndices).size;
+      const scaleNote = `<dl class="visual-scale"><div><dt>Фрагмент</dt><dd>${visibleOriginal.length} отсчётов</dd></div><div><dt>Шаг</dt><dd>ΔU=${dU.toFixed(3)} В</dd></div><div><dt>Уровни</dt><dd>${usedLevelCount} разных из ${levelCount}</dd></div></dl>`;
       const histScale = `<dl class="visual-scale"><div><dt>Столбцы</dt><dd>p_j</dd></div><div><dt>Красная линия</dt><dd>F_j</dd></div><div><dt>Пунктир</dt><dd>форма W_g(u)</dd></div></dl>`;
 
       return `<div class="stage-panel__visuals-stack">
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Процесс квантования и шум ξк</p>${scaleNote}${timeSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Отсчёт x(kΔt) → квантованный уровень v_k^j</p>${scaleNote}${timeSvg}</div>
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Амплитудная характеристика квантователя</p>${scaleNote}${stairSvg}</div>
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Вероятности p_j и интегральное распределение F_j</p>${histScale}${histSvg}</div>
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Распределение ошибки квантования ξк=v_j-x_k</p>${scaleNote}${errSvg}</div>

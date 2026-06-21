@@ -46,17 +46,30 @@
     },
 
     renderSVG: function(id, params, helpers, SignalData) {
-      const { W, H, yZero, drawCurveSVG } = helpers;
+      const { W, H, yZero } = helpers;
       const vm = window.VisualMath;
-      const Pg = vm.safeNumber(params.signalPower, 1.5);
       const dfg = vm.safeNumber(params.signalBandwidth, 28);
-      const epsAbs = SignalData.filter_error_analytic_abs || 0;
-      const Px = SignalData.filtered_power_analytic || Math.max(0, Pg - epsAbs);
+      const dynamicWindow = vm.chooseDynamicWindow(SignalData.x_t, {
+        minLength: Math.min(96, SignalData.x_t.length),
+        length: Math.min(240, Math.max(96, Math.round(SignalData.x_t.length * 0.28)))
+      });
+      const timeStart = vm.indexToTimeMs(dynamicWindow.start, SignalData.x_t.length, params);
+      const timeEnd = vm.indexToTimeMs(Math.max(dynamicWindow.start, dynamicWindow.end - 1), SignalData.x_t.length, params);
+      const filteredSamples = dynamicWindow.values.map((value, index) => [
+        vm.indexToTimeMs(dynamicWindow.start + index, SignalData.x_t.length, params),
+        value
+      ]);
+      const sourceSamples = SignalData.g_t.slice(dynamicWindow.start, dynamicWindow.end).map((value, index) => [
+        vm.indexToTimeMs(dynamicWindow.start + index, SignalData.g_t.length, params),
+        value
+      ]);
 
       let timeSvg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
-      timeSvg += vm.axes(W, H, yZero, "t", "u(t)");
-      timeSvg += drawCurveSVG(SignalData.g_t, '#287c9f', 2.5, 0.25);
-      timeSvg += drawCurveSVG(SignalData.x_t, '#0c6b4f', 2.8);
+      timeSvg += vm.axes(W, H, yZero, "t, мс", "u(t), В", {
+        xMin: timeStart, xMax: timeEnd, yMin: SignalData.yMin, yMax: SignalData.yMax
+      });
+      timeSvg += vm.drawXYCurve(sourceSamples, W, H, timeStart, timeEnd, SignalData.yMin, SignalData.yMax, '#287c9f', 2.2, 0.42);
+      timeSvg += vm.drawXYCurve(filteredSamples, W, H, timeStart, timeEnd, SignalData.yMin, SignalData.yMax, '#0c6b4f', 2.8);
       timeSvg += `</svg>`;
 
       const fMax = vm.getSpectrumWindow(params).max;
@@ -65,22 +78,27 @@
       const spectrumPeak = Math.max(...spectrumSamples.map(([, y]) => y), 0.0001);
       const y = (value) => Hf - ((value - 0) / (spectrumPeak * 1.08)) * Hf;
       const x = (frequency) => ((frequency + fMax) / (2 * fMax)) * W;
-      let freqSvg = `<svg viewBox="0 0 ${W} ${Hf}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
-      freqSvg += vm.axes(W, Hf, Hf - 18, "f", "G(f)");
+      let freqSvg = `<svg viewBox="0 0 ${W} ${Hf}" width="100%" height="auto" class="stage-panel__visuals-svg spectrum-plot spectrum-plot--continuous">`;
+      freqSvg += vm.axes(W, Hf, Hf - 18, "f, кГц", "Gg(f), В²/кГц", {
+        xMin: -fMax, xMax: fMax, yMin: 0, yMax: spectrumPeak * 1.08, note: "энергетическое распределение"
+      });
       freqSvg += vm.drawXYCurve(spectrumSamples, W, Hf, -fMax, fMax, 0, spectrumPeak * 1.08, "#287c9f", 2.4, 0.4);
       const passSamples = spectrumSamples.map(([f, value]) => [f, Math.abs(f) <= dfg ? value : 0]);
       const tailSamples = spectrumSamples.map(([f, value]) => [f, Math.abs(f) > dfg ? value : 0]);
       freqSvg += vm.drawXYCurve(passSamples, W, Hf, -fMax, fMax, 0, spectrumPeak * 1.08, "#0c6b4f", 3, 1);
-      freqSvg += `<path d="${tailSamples.map(([f, value], index) => `${index === 0 ? "M" : "L"} ${x(f)} ${y(value)}`).join(" ")} L ${W} ${Hf - 18} L 0 ${Hf - 18} Z" fill="rgba(231,76,60,0.16)" stroke="none" />`;
-      freqSvg += `<rect x="${x(-dfg)}" y="20" width="${Math.max(0, x(dfg) - x(-dfg))}" height="${Hf - 38}" fill="rgba(12,107,79,0.08)" stroke="#0c6b4f" stroke-width="2" />
+      freqSvg += `<path d="${tailSamples.map(([f, value], index) => `${index === 0 ? "M" : "L"} ${x(f)} ${y(value)}`).join(" ")} L ${W} ${Hf} L 0 ${Hf} Z" fill="rgba(231,76,60,0.10)" stroke="none" />`;
+      freqSvg += `<rect x="${x(-dfg)}" y="20" width="${Math.max(0, x(dfg) - x(-dfg))}" height="${Hf - 38}" fill="rgba(12,107,79,0.06)" stroke="#0c6b4f" stroke-width="1.2" />
         <line x1="${x(-dfg)}" y1="20" x2="${x(-dfg)}" y2="${Hf - 18}" stroke="#e74c3c" stroke-width="1.5" stroke-dasharray="5,6" />
-        <line x1="${x(dfg)}" y1="20" x2="${x(dfg)}" y2="${Hf - 18}" stroke="#e74c3c" stroke-width="1.5" stroke-dasharray="5,6" />`;
+        <line x1="${x(dfg)}" y1="20" x2="${x(dfg)}" y2="${Hf - 18}" stroke="#e74c3c" stroke-width="1.5" stroke-dasharray="5,6" />
+        <text class="plot-note" x="${x(-dfg) - 8}" y="34" text-anchor="end">−fср</text>
+        <text class="plot-note" x="${x(dfg) + 8}" y="34">fср=Δfg</text>`;
       freqSvg += `</svg>`;
-      const legend = `<dl class="visual-scale"><div><dt>До ФНЧ</dt><dd><span class="legend-line legend-line--source"></span>g(t)</dd></div><div><dt>После ФНЧ</dt><dd><span class="legend-line legend-line--filtered"></span>x(t), |f|≤Δfg</dd></div><div><dt>Энергия</dt><dd>Px≈${Px.toFixed(3)} В², εf²≈${epsAbs.toFixed(4)} В²</dd></div></dl>`;
+      const timeLegend = `<dl class="visual-scale"><div><dt>До ФНЧ</dt><dd><span class="legend-line legend-line--source"></span>g(t)</dd></div><div><dt>После ФНЧ</dt><dd><span class="legend-line legend-line--filtered"></span>x(t)</dd></div><div><dt>Общее окно</dt><dd>${(timeEnd - timeStart).toFixed(3)} мс</dd></div></dl>`;
+      const spectrumLegend = `<dl class="visual-scale"><div><dt>До ФНЧ</dt><dd><span class="legend-line legend-line--source"></span>Gg(f)</dd></div><div><dt>После ФНЧ</dt><dd><span class="legend-line legend-line--filtered"></span>Gx(f)</dd></div><div><dt>Срез</dt><dd>fср=Δfg=${dfg.toFixed(2)} кГц</dd></div></dl>`;
 
       return `<div class="stage-panel__visuals-stack">
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Наложение во времени: g(t) и x(t)</p>${legend}${timeSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Ограничение спектра идеальным ФНЧ</p>${legend}${freqSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">1. Во времени: g(t) до ФНЧ и x(t) после ФНЧ</p>${timeLegend}${timeSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">2. В спектре: Gg(f) и пропущенная часть Gx(f)</p>${spectrumLegend}${freqSvg}<div class="stage-panel__info-box">Высокочастотные составляющие подавлены, поэтому часть мощности теряется.</div></div>
       </div>`;
     },
 

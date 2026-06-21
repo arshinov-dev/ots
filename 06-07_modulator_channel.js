@@ -193,17 +193,33 @@
         },
 
         renderSVG: function(id, params, helpers, SignalData) {
-            const { W, H, getX, getY } = helpers;
-            const zoom = window.RadioMath.getZoomInfo(SignalData, 5);
+            const { W } = helpers;
+            const zoom = window.RadioMath.getZoomInfo(SignalData, 10);
             const bitStepX = W / Math.max(1, zoom.length);
             const xOfIndex = (index) => ((index - zoom.startIdx) / Math.max(1, zoom.endIdx - zoom.startIdx)) * W;
 
-            let maxS = SignalData.zMax || Math.max(SignalData.Um * 1.5, ...SignalData.S_t.map(Math.abs));
+            let maxS = Math.max(SignalData.Um || 0, ...SignalData.S_t.map(Math.abs));
             if (maxS === 0) maxS = 1;
             const rowH = 72;
             const oscH = rowH * 3 + 18;
             const rowCenter = (row) => 18 + row * rowH + rowH / 2;
             const carrierCycles = window.RadioMath.getCarrierCycles(params);
+            const visualSignal = [];
+            let fskPhase = 0;
+            for (let i = zoom.startIdx; i <= zoom.endIdx; i++) {
+              const bitIdx = Math.min(SignalData.b_t.length - 1, Math.max(0, Math.floor(i / zoom.pointsPerBit)));
+              const bit = SignalData.b_t[bitIdx] > 0 ? 1 : -1;
+              if (params.modulation === "DCHM") {
+                const cycles = bit > 0 ? carrierCycles.high : carrierCycles.low;
+                fskPhase += 2 * Math.PI * cycles / zoom.pointsPerBit;
+                visualSignal.push(SignalData.Um * Math.sin(fskPhase));
+              } else {
+                const carrierPhase = 2 * Math.PI * carrierCycles.base * (i / zoom.pointsPerBit);
+                const symbolPhase = params.modulation === "DOFM" ? (SignalData.modulation_symbols?.[bitIdx]?.phase || 0) : 0;
+                const amplitude = params.modulation === "DAM" && bit < 0 ? 0 : SignalData.Um;
+                visualSignal.push(amplitude * Math.sin(carrierPhase + symbolPhase));
+              }
+            }
             const drawRowCurve = (fn, color, width = 2.2) => {
               let d = "";
               for (let i = zoom.startIdx; i <= zoom.endIdx; i++) {
@@ -222,7 +238,7 @@
             for (let row = 0; row < 3; row++) {
               const cy = rowCenter(row);
               oscSvg += `<line x1="0" y1="${cy}" x2="${W}" y2="${cy}" stroke="#1f2b26" stroke-width="1.2" />
-                <text x="14" y="${cy - 14}" fill="#31433b" font-family="monospace" font-size="14">${row === 0 ? "b_m(t)" : row === 1 ? "uн(t)" : "s(t)"}</text>`;
+                <text x="14" y="${cy - 14}" fill="#31433b" font-family="monospace" font-size="14">${row === 0 ? "b(t): 0/1" : row === 1 ? "uн(t)" : "S(t)"}</text>`;
             }
             for (let i = 0; i <= zoom.length; i++) {
               const x = i * bitStepX;
@@ -243,12 +259,13 @@
               bitD += `L ${x2} ${y} `;
             }
             oscSvg += `<path d="${bitD}" stroke="#1f2b26" stroke-width="2.4" fill="none" stroke-linejoin="miter" />`;
+            zoom.bits.forEach((bit, index) => {
+              oscSvg += `<text class="plot-note" x="${(index + 0.5) * bitStepX}" y="${rowCenter(0) + 4}" text-anchor="middle">${bit > 0 ? "1" : "0"}</text>`;
+            });
             oscSvg += drawRowCurve((i) => {
-              const bitIdx = Math.min(SignalData.b_t.length - 1, Math.max(0, Math.floor(i / zoom.pointsPerBit)));
-              const tSymbol = (i - bitIdx * zoom.pointsPerBit) / zoom.pointsPerBit;
-              return rowCenter(1) - Math.sin(2 * Math.PI * carrierCycles.base * tSymbol) * rowH * 0.28;
+              return rowCenter(1) - Math.sin(2 * Math.PI * carrierCycles.base * (i / zoom.pointsPerBit)) * rowH * 0.28;
             }, "#62716b", 1.9);
-            oscSvg += drawRowCurve((i) => rowCenter(2) - (SignalData.S_t[i] / maxS) * rowH * 0.31, "#287c9f", 2.4);
+            oscSvg += drawRowCurve((i) => rowCenter(2) - (visualSignal[i - zoom.startIdx] / maxS) * rowH * 0.31, "#287c9f", 2.4);
             if (params.modulation === "DAM") {
               for (let i = 0; i < zoom.length; i++) {
                 if (zoom.bits[i] < 0) oscSvg += `<rect x="${i * bitStepX}" y="${rowCenter(2) - rowH * 0.32}" width="${bitStepX}" height="${rowH * 0.64}" fill="rgba(231,76,60,0.08)" />`;
@@ -260,7 +277,7 @@
             }
             oscSvg += `</svg>`;
             const bitScale = `<dl class="visual-scale"><div><dt>Окно</dt><dd>биты ${zoom.start + 1}-${zoom.end}</dd></div><div><dt>Управление</dt><dd>${params.modulation === "DAM" ? "бит меняет амплитуду" : params.modulation === "DCHM" ? "бит выбирает f1 или f2" : "бит меняет относительную фазу"}</dd></div><div><dt>Амплитуда</dt><dd>U_m=${(SignalData.Um || 0).toFixed(4)} В</dd></div></dl>`;
-            const visualNote = `<p class="stage-panel__info-box stage-panel__info-box--ok">${window.RadioMath.getVisualFrequencyNote(params)}</p>`;
+            const visualNote = `<p class="stage-panel__info-box stage-panel__info-box--ok">Осциллограмма показана в учебном масштабе: реальные несущие частоты заданы в МГц, для наглядности частота на графике нормирована.</p>`;
             const symbolRows = (SignalData.modulation_symbols || []).slice(zoom.start, zoom.end).map((symbol, index) => {
               const shownBit = symbol.bit > 0 ? "1" : "0";
               const phasePi = symbol.phase / Math.PI;
@@ -272,45 +289,55 @@
               return `<tr><td>${zoom.start + index + 1}</td><td>${shownBit}</td><td>${state}</td></tr>`;
             }).join("");
             const symbolTable = `<div class="quant-table-wrap"><table class="quant-table"><thead><tr><th>бит</th><th>b</th><th>параметр несущей</th></tr></thead><tbody>${symbolRows}</tbody></table></div>`;
+            const symbolDetails = `<details class="visual-step"><summary class="visual-step__summary"><span>Параметры</span><strong>Показать закон манипуляции по символам</strong></summary><div class="visual-step__body">${symbolTable}</div></details>`;
 
-            const peaks = window.RadioMath.getSpectrumPeaks(params);
-            const specH = 260;
+            const specH = 240;
             const powerForSpectrum = window.RadioMath.getPowerParams(params);
             const dfMHz = powerForSpectrum.df_pcm / 1000;
             const f0 = window.RadioMath.safeNumber(params.primaryFrequency, 60);
             const f1 = window.RadioMath.safeNumber(params.secondaryFrequency, f0 + 1.5);
-            const fValues = peaks.map((peak) => peak.f);
-            const fMin = Math.min(...fValues);
-            const fMax = Math.max(...fValues);
-            const pad = Math.max(0.02, (fMax - fMin) * 0.16);
-            const specMin = fMin - pad;
-            const specMax = fMax + pad;
-            const sx = (f) => ((f - specMin) / Math.max(0.001, specMax - specMin)) * W;
-            const sy = (a) => specH - 24 - a * (specH - 54);
-            let specSvg = `<svg viewBox="0 0 ${W} ${specH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
-            specSvg += window.VisualMath.axes(W, specH, specH - 24, "f, МГц", "|S(f)|");
-            const envelopeCenters = params.modulation === "DCHM"
-              ? [Math.min(f0, f1), Math.max(f0, f1)]
-              : [f0];
-            envelopeCenters.forEach((center) => {
-              const samples = window.VisualMath.makeSamples(center - 4 * dfMHz, center + 4 * dfMHz, 180, (f) => {
-                const x = Math.PI * (f - center) / Math.max(dfMHz, 1e-6);
-                return Math.abs(x) < 1e-6 ? 1 : Math.abs(Math.sin(x) / x);
-              });
-              const path = samples.map(([f, value], index) => `${index === 0 ? "M" : "L"} ${sx(f)} ${sy(Math.min(1, value))}`).join(" ");
-              specSvg += `<path d="${path}" stroke="#62716b" stroke-width="1.8" fill="none" stroke-dasharray="6,6" stroke-opacity="0.68" />`;
+            const carriers = params.modulation === "DCHM" ? [Math.min(f0, f1), Math.max(f0, f1)] : [f0];
+            const spectrumCenter = (carriers[0] + carriers[carriers.length - 1]) / 2;
+            const totalHalfWidth = Math.max(powerForSpectrum.df_s / 2000, dfMHz);
+            const bandLeft = spectrumCenter - totalHalfWidth;
+            const bandRight = spectrumCenter + totalHalfWidth;
+            const lobeHalfWidth = Math.max(dfMHz, 0.0001);
+            const pad = Math.max(0.02, (bandRight - bandLeft) * 0.14);
+            const specMin = bandLeft - pad;
+            const specMax = bandRight + pad;
+            const specMinKhz = (specMin - f0) * 1000;
+            const specMaxKhz = (specMax - f0) * 1000;
+            const sx = (f) => ((((f - f0) * 1000) - specMinKhz) / Math.max(0.001, specMaxKhz - specMinKhz)) * W;
+            const baseY = specH - 28;
+            const lobeTop = 62;
+            let specSvg = `<svg viewBox="0 0 ${W} ${specH}" width="100%" height="auto" class="stage-panel__visuals-svg spectrum-plot spectrum-plot--schematic">`;
+            specSvg += window.VisualMath.axes(W, specH, baseY, "f−f0, кГц", "S(f), норм.", {
+              xMin: specMinKhz, xMax: specMaxKhz, yMin: 0, yMax: 1, note: "схематически, нормировано"
             });
-            peaks.forEach((peak) => {
-              const x = sx(peak.f);
-              specSvg += `<line x1="${x}" y1="${specH - 24}" x2="${x}" y2="${sy(Math.min(1, peak.a))}" stroke="${peak.kind === "carrier" ? "#0c6b4f" : "#7554aa"}" stroke-width="${peak.kind === "carrier" ? 3 : 2}" />
-                <circle cx="${x}" cy="${sy(Math.min(1, peak.a))}" r="${peak.kind === "carrier" ? 4 : 3}" fill="${peak.kind === "carrier" ? "#0c6b4f" : "#7554aa"}" />`;
+            carriers.forEach((center, index) => {
+              const left = Math.max(bandLeft, center - lobeHalfWidth);
+              const right = Math.min(bandRight, center + lobeHalfWidth);
+              const color = index === 0 ? "#287c9f" : "#7554aa";
+              specSvg += `<path d="M ${sx(left)} ${baseY} Q ${sx(center)} ${lobeTop} ${sx(right)} ${baseY}" fill="${color}" fill-opacity="0.14" stroke="${color}" stroke-width="2.2" />
+                <line x1="${sx(center)}" y1="${baseY}" x2="${sx(center)}" y2="${lobeTop}" stroke="#0c6b4f" stroke-width="2.6" />
+                <text class="plot-note" x="${sx(center)}" y="${baseY - 8}" text-anchor="middle">${params.modulation === "DCHM" ? (index === 0 ? "f1" : "f2") : "f0"}</text>`;
             });
+            specSvg += `<line x1="${sx(bandLeft)}" y1="28" x2="${sx(bandLeft)}" y2="${baseY}" stroke="#e74c3c" stroke-width="1.5" stroke-dasharray="5,6" />
+              <line x1="${sx(bandRight)}" y1="28" x2="${sx(bandRight)}" y2="${baseY}" stroke="#e74c3c" stroke-width="1.5" stroke-dasharray="5,6" />
+              <line x1="${sx(bandLeft)}" y1="30" x2="${sx(bandRight)}" y2="30" stroke="#e74c3c" stroke-width="1.5" />
+              <text class="plot-note" x="${sx(spectrumCenter)}" y="23" text-anchor="middle">Δfs</text>
+              <line x1="${sx(carriers[0])}" y1="82" x2="${sx(Math.min(bandRight, carriers[0] + lobeHalfWidth))}" y2="82" stroke="#62716b" stroke-width="1.4" />
+              <text class="plot-note" x="${(sx(carriers[0]) + sx(Math.min(bandRight, carriers[0] + lobeHalfWidth))) / 2}" y="76" text-anchor="middle">Δfц</text>`;
+            if (params.modulation === "DAM") {
+              specSvg += `<text class="plot-note" x="${sx(f0 - lobeHalfWidth)}" y="${baseY - 8}" text-anchor="middle">f0−Δfц</text>
+                <text class="plot-note" x="${sx(f0 + lobeHalfWidth)}" y="${baseY - 8}" text-anchor="middle">f0+Δfц</text>`;
+            }
             specSvg += `</svg>`;
-            const spectrumScale = `<dl class="visual-scale"><div><dt>Полоса</dt><dd>Δfs=${(SignalData.df_s || 0).toFixed(2)} кГц</dd></div><div><dt>Цифровой спектр</dt><dd>Δfц=${window.RadioMath.getDigitalBandwidth(params).toFixed(2)} кГц</dd></div><div><dt>Несущая</dt><dd>${params.modulation === "DCHM" ? "f2/f1" : "f0"}</dd></div></dl>`;
+            const spectrumScale = `<dl class="visual-scale"><div><dt>Спектр</dt><dd>S(f), схематически</dd></div><div><dt>Цифровая полоса</dt><dd>Δfц=${window.RadioMath.getDigitalBandwidth(params).toFixed(2)} кГц</dd></div><div><dt>Полоса сигнала</dt><dd>Δfs=${(SignalData.df_s || 0).toFixed(2)} кГц</dd></div></dl>`;
             return `<div class="stage-panel__visuals-stack">
               <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Учебная осциллограмма дискретной манипуляции</p>${bitScale}${oscSvg}${visualNote}</div>
-              <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Закон манипуляции в выбранном окне</p>${symbolTable}</div>
-              <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Амплитудный спектр сигнала дискретной модуляции</p>${spectrumScale}${specSvg}</div>
+              <div class="stage-panel__visuals-layer">${symbolDetails}</div>
+              <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Схематический нормированный спектр S(f)</p>${spectrumScale}${specSvg}</div>
             </div>`;
         },
 
@@ -358,39 +385,41 @@
         },
 
         renderSVG: function(id, params, helpers, SignalData) {
-            const { W, H, getX, getY } = helpers;
-            let chanH = 120, chanY0 = chanH / 2;
-            const zoom = window.RadioMath.getZoomInfo(SignalData, 5);
+            const { W } = helpers;
+            const zoom = window.RadioMath.getZoomInfo(SignalData, 10);
             const bitStepX = W / Math.max(1, zoom.length);
             const xOfIndex = (index) => ((index - zoom.startIdx) / Math.max(1, zoom.endIdx - zoom.startIdx)) * W;
-            
+            const power = window.RadioMath.getPowerParams(params);
             let maxZ = SignalData.zMax || Math.max(...SignalData.z_t.map(Math.abs));
             if (maxZ < SignalData.Um) maxZ = SignalData.Um * 1.5;
             if (maxZ === 0) maxZ = 1;
-
-            let createChanSVG = (data, color) => {
-                let svg = `<svg viewBox="0 0 ${W} ${chanH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
-                svg += `<line x1="0" y1="${chanY0}" x2="${W}" y2="${chanY0}" stroke="#d5ddd8" stroke-width="2" />`;
-                for (let i = 0; i <= zoom.length; i++) {
-                    const x = i * bitStepX;
-                    svg += `<line x1="${x}" y1="0" x2="${x}" y2="${chanH}" stroke="rgba(98,113,107,0.13)" stroke-dasharray="3,8" />`;
-                }
-                let d = `M 0 ${chanY0}`;
-                for (let i = zoom.startIdx; i <= zoom.endIdx; i++) {
-                    let y = chanY0 - (data[i] / maxZ) * (chanH * 0.4);
-                    if (y < -10) y = -10; if (y > chanH + 10) y = chanH + 10;
-                    d += ` L ${xOfIndex(i)} ${y}`;
-                }
-                svg += `<path d="${d}" stroke="${color}" stroke-width="2" fill="none" stroke-linejoin="round" />`;
-                svg += `</svg>`;
-                return svg;
+            const rowH = 104;
+            const chanH = rowH * 3 + 18;
+            const rowCenter = (row) => 12 + row * rowH + rowH / 2;
+            const rowPath = (data, row, color) => {
+              let d = "";
+              for (let i = zoom.startIdx; i <= zoom.endIdx; i++) {
+                const y = rowCenter(row) - (data[i] / maxZ) * (rowH * 0.38);
+                d += `${d ? "L" : "M"} ${xOfIndex(i)} ${y} `;
+              }
+              return `<path d="${d}" stroke="${color}" stroke-width="2.1" fill="none" stroke-linejoin="round" />`;
             };
+            let channelSvg = `<svg viewBox="0 0 ${W} ${chanH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
+            channelSvg += `<rect x="1" y="1" width="${W - 2}" height="${chanH - 2}" fill="none" stroke="#1f2b26" stroke-width="1.3" />`;
+            ["S(t)", "n(t)", "z(t)=χS(t)+n(t)"].forEach((label, row) => {
+              channelSvg += `<line x1="0" y1="${rowCenter(row)}" x2="${W}" y2="${rowCenter(row)}" stroke="#d5ddd8" stroke-width="1.4" />
+                <text class="plot-axis-label" x="12" y="${rowCenter(row) - 16}">${label}</text>`;
+            });
+            for (let i = 0; i <= zoom.length; i++) {
+              const x = i * bitStepX;
+              channelSvg += `<line x1="${x}" y1="1" x2="${x}" y2="${chanH - 1}" stroke="rgba(98,113,107,0.18)" stroke-dasharray="3,8" />`;
+            }
+            channelSvg += rowPath(SignalData.S_t, 0, "#287c9f");
+            channelSvg += rowPath(SignalData.n_t, 1, "#e74c3c");
+            channelSvg += rowPath(SignalData.z_t, 2, "#0c6b4f");
+            channelSvg += `</svg>`;
 
-            let sSVG = createChanSVG(SignalData.S_t, '#287c9f');
-            let nSVG = createChanSVG(SignalData.n_t, '#e74c3c');
-            let zSVG = createChanSVG(SignalData.z_t, '#0c6b4f');
-
-            const pdfH = 230;
+            const pdfH = 190;
             const sigma = SignalData.noiseSigma || 1;
             const pdfSamples = window.VisualMath.makeSamples(-4 * sigma, 4 * sigma, 180, (u) => Math.exp(-u * u / (2 * sigma * sigma)) / (sigma * Math.sqrt(2 * Math.PI)));
             const pdfPeak = 1 / (sigma * Math.sqrt(2 * Math.PI));
@@ -444,35 +473,21 @@
               <text x="${W - 22}" y="48" fill="#0c6b4f" font-family="monospace" font-size="14" text-anchor="end">Райс</text>`;
             envelopeSvg += `</svg>`;
 
-            const scaleNote = `<dl class="visual-scale"><div><dt>Общий масштаб</dt><dd>все три графика: ±${maxZ.toFixed(4)} В</dd></div><div><dt>Окно</dt><dd>биты ${zoom.start + 1}-${zoom.end}</dd></div></dl>`;
+            const scaleNote = `<dl class="visual-scale"><div><dt>Общий масштаб</dt><dd>±${maxZ.toFixed(4)} В</dd></div><div><dt>Окно</dt><dd>биты ${zoom.start + 1}-${zoom.end}</dd></div><div><dt>Модель</dt><dd>z(t)=χS(t)+n(t)</dd></div></dl>`;
             const noiseScale = `<dl class="visual-scale"><div><dt>σш</dt><dd>${sigma.toFixed(4)} В</dd></div><div><dt>Pш</dt><dd>${(SignalData.P_sh || 0).toFixed(6)} Вт</dd></div><div><dt>Модель</dt><dd>n(t)=Nшc cosωt + Nшs sinωt</dd></div></dl>`;
             const channelScheme = `<dl class="visual-scale"><div><dt>Модель канала</dt><dd>S(t) → χS(t) + n(t) → z(t)</dd></div><div><dt>χ</dt><dd>не задан в варианте, в расчётах принято χ = 1</dd></div></dl>`;
+            const powerScale = `<dl class="visual-scale"><div><dt>N0</dt><dd>${power.N0}</dd></div><div><dt>Pш</dt><dd>${power.P_sh.toFixed(6)} Вт</dd></div><div><dt>Ps</dt><dd>${power.P_c.toFixed(6)} Вт</dd></div></dl>
+              <dl class="visual-scale"><div><dt>Um</dt><dd>${power.Um.toFixed(4)} В</dd></div><div><dt>C</dt><dd>${power.capacity.toFixed(2)} кбит/с</dd></div><div><dt>χ</dt><dd>1</dd></div></dl>`;
+            const cloudDetails = `<details class="visual-step"><summary class="visual-step__summary"><span>Статистика</span><strong>Показать облако синфазной и квадратурной помехи</strong></summary><div class="visual-step__body">${noiseScale}${cloudSvg}</div></details>`;
+            const envelopeDetails = `<details class="visual-step"><summary class="visual-step__summary"><span>Огибающие</span><strong>Показать распределения Рэлея и Райса</strong></summary><div class="visual-step__body">${noiseScale}${envelopeSvg}</div></details>`;
             return `<div class="stage-panel__visuals-stack">
-                <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Модель непрерывного канала связи</p>${channelScheme}</div>
-                <div class="stage-panel__visuals-layer">
-                    <p class="stage-panel__visuals-header"><strong style="color:#287c9f">Идеальный сигнал S(t)</strong></p>
-                    ${scaleNote}${sSVG}
-                </div>
-                <div class="stage-panel__visuals-layer">
-                    <p class="stage-panel__visuals-header"><strong style="color:#e74c3c">Гауссовский шум n(t)</strong></p>
-                    ${nSVG}
-                </div>
-                <div class="stage-panel__visuals-layer">
-                    <p class="stage-panel__visuals-header"><strong style="color:#0c6b4f">Принятая смесь z(t)</strong></p>
-                    ${zSVG}
-                </div>
+                <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Канал: S(t) → n(t) → z(t)</p>${channelScheme}${powerScale}${scaleNote}${channelSvg}</div>
                 <div class="stage-panel__visuals-layer">
                     <p class="stage-panel__visuals-header">ФПВ мгновенных значений шума</p>
                     ${noiseScale}${pdfSvg}
                 </div>
-                <div class="stage-panel__visuals-layer">
-                    <p class="stage-panel__visuals-header">Синфазная и квадратурная составляющие узкополосной помехи</p>
-                    ${noiseScale}${cloudSvg}
-                </div>
-                <div class="stage-panel__visuals-layer">
-                    <p class="stage-panel__visuals-header">ФПВ огибающей помехи и смеси с сигналом</p>
-                    ${noiseScale}${envelopeSvg}
-                </div>
+                <div class="stage-panel__visuals-layer">${cloudDetails}</div>
+                <div class="stage-panel__visuals-layer">${envelopeDetails}</div>
             </div>`;
         },
 

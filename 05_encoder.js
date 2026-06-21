@@ -83,22 +83,46 @@
 
     renderSVG: function(id, params, helpers, SignalData) {
       const { W } = helpers;
+      const vm = window.VisualMath;
       const calculation = SignalData.calculation || window.SystemCalculations.calculate(params);
       const { mu, tauSim } = calculation.coding;
       const { levelCount } = calculation.quantizer;
-      const numBits = SignalData.b_t ? SignalData.b_t.length : 0;
       const dt = calculation.sampling.dt;
-
-      const codeItems = SignalData.code_words.slice(0, 10).map((word, index) => {
-        const level = SignalData.quantized_v[index] ?? 0;
-        const levelIndex = SignalData.quantized_indices?.[index] ?? 0;
-        return `<div class="code-strip__item">
-          <span>k=${index + 1}</span>
-          <strong>${word}</strong>
-          <em>v${levelIndex + 1}=${level.toFixed(2)} В</em>
-        </div>`;
-      }).join("");
-      const codeStrip = `<div class="code-strip">${codeItems}</div>`;
+      const maxWordsByBits = Math.max(4, Math.floor(24 / Math.max(1, mu)));
+      const targetWordCount = Math.min(6, maxWordsByBits, SignalData.code_words.length);
+      const wordWindow = vm.chooseDynamicWindow(SignalData.quantized_indices || [], {
+        minLength: Math.min(4, targetWordCount),
+        length: targetWordCount
+      });
+      const selectedWords = SignalData.code_words.slice(wordWindow.start, wordWindow.end);
+      const selectedLevels = SignalData.quantized_v.slice(wordWindow.start, wordWindow.end);
+      const selectedLevelIndices = SignalData.quantized_indices.slice(wordWindow.start, wordWindow.end);
+      const selectedBits = selectedWords.flatMap((word) => [...word].map((bit) => bit === "1" ? 1 : -1));
+      const tapeH = 190;
+      const wordWidth = W / Math.max(1, selectedWords.length);
+      let codeTapeSvg = `<svg viewBox="0 0 ${W} ${tapeH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
+      codeTapeSvg += `<rect x="0" y="0" width="${W}" height="${tapeH}" fill="rgba(40,124,159,0.035)" />
+        <line x1="0" y1="82" x2="${W}" y2="82" stroke="#91a099" stroke-width="1.2" />
+        <text class="plot-axis-label" x="12" y="22">v_k^j</text>
+        <text class="plot-axis-label" x="12" y="108">b_k^μ</text>`;
+      selectedWords.forEach((word, wordIndex) => {
+        const wordX = wordIndex * wordWidth;
+        const centerX = wordX + wordWidth / 2;
+        const sourceIndex = wordWindow.start + wordIndex;
+        const levelIndex = selectedLevelIndices[wordIndex] ?? 0;
+        const level = selectedLevels[wordIndex] ?? 0;
+        codeTapeSvg += `<line x1="${wordX}" y1="8" x2="${wordX}" y2="${tapeH - 8}" stroke="#1f2b26" stroke-width="1.8" />
+          <text class="plot-note" x="${centerX}" y="24" text-anchor="middle">k=${sourceIndex + 1}</text>
+          <text x="${centerX}" y="58" fill="#0c6b4f" font-family="monospace" font-size="16" font-weight="700" text-anchor="middle">v${levelIndex + 1}=${level.toFixed(2)} В</text>`;
+        [...word].forEach((bit, bitIndex) => {
+          const bitWidth = wordWidth / Math.max(1, mu);
+          const bitX = wordX + bitIndex * bitWidth;
+          codeTapeSvg += `<line x1="${bitX}" y1="90" x2="${bitX}" y2="${tapeH - 8}" stroke="rgba(98,113,107,0.30)" stroke-width="1" />
+            <text x="${bitX + bitWidth / 2}" y="151" fill="#1f2b26" font-family="monospace" font-size="24" font-weight="800" text-anchor="middle">${bit}</text>`;
+        });
+      });
+      codeTapeSvg += `<line x1="${W}" y1="8" x2="${W}" y2="${tapeH - 8}" stroke="#1f2b26" stroke-width="1.8" /></svg>`;
+      const tapeScale = `<dl class="visual-scale"><div><dt>Фрагмент</dt><dd>${selectedWords.length} кодовых слов</dd></div><div><dt>Группировка</dt><dd>μ=${mu} бит</dd></div><div><dt>Лента</dt><dd>${selectedBits.length} бит</dd></div></dl>`;
 
       const codeRows = (SignalData.codebook || buildCodebook(levelCount, mu)).map((word, index) => {
         const level = SignalData.levels?.[index] ?? buildQuantizerParams(params).levels[index];
@@ -113,7 +137,12 @@
       const matrixHead = `<tr><th>d</th>${Array.from({ length: levelCount }, (_, i) => `<th>${i + 1}</th>`).join("")}</tr>`;
       const distanceTable = `<div class="distance-table-wrap"><table class="distance-table"><thead>${matrixHead}</thead><tbody>${matrixRows}</tbody></table></div>`;
 
-      const zoom = window.VisualMath.getZoomWindow(SignalData, 5);
+      const zoom = {
+        start: wordWindow.start * mu,
+        end: wordWindow.end * mu,
+        length: selectedBits.length,
+        bits: selectedBits
+      };
       const zoomH = 150;
       const zoomBitW = W / Math.max(1, zoom.length);
       let zoomSvg = `<svg viewBox="0 0 ${W} ${zoomH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
@@ -130,36 +159,38 @@
           if (prevY !== y) zoomD += `L ${x1} ${prevY} L ${x1} ${y} `;
         }
         zoomD += `L ${x2} ${y} `;
-        zoomSvg += `<line x1="${x1}" y1="0" x2="${x1}" y2="${zoomH}" stroke="rgba(98,113,107,0.28)" stroke-dasharray="4,7" />`;
+        const isWordBoundary = i % mu === 0;
+        zoomSvg += `<line x1="${x1}" y1="0" x2="${x1}" y2="${zoomH}" stroke="${isWordBoundary ? "#1f2b26" : "rgba(98,113,107,0.28)"}" stroke-width="${isWordBoundary ? 1.8 : 1}" stroke-dasharray="${isWordBoundary ? "none" : "4,7"}" />`;
       }
-      zoomSvg += `<line x1="${W}" y1="0" x2="${W}" y2="${zoomH}" stroke="rgba(98,113,107,0.28)" stroke-dasharray="4,7" />`;
+      zoomSvg += `<line x1="${W}" y1="0" x2="${W}" y2="${zoomH}" stroke="#1f2b26" stroke-width="1.8" />`;
       zoomSvg += `<path d="${zoomD}" stroke="#0c6b4f" stroke-width="3.2" fill="none" stroke-linejoin="miter" />`;
       zoomSvg += `</svg>`;
 
       const specH = 260;
       const xUnitMax = Math.max(10, 2 * mu + 2);
       const xSpec = (unit) => (unit / xUnitMax) * W;
+      const fMaxKhz = (xUnitMax / Math.max(1, mu)) / tauSim;
       const ySpec = (value) => specH - 24 - value * (specH - 54);
       const sinc = (unit) => {
         const x = Math.PI * unit / mu;
         return Math.abs(x) < 1e-6 ? 1 : Math.abs(Math.sin(x) / x);
       };
       const envelope = window.VisualMath.makeSamples(0, xUnitMax, 360, (unit) => sinc(unit));
-      let specSvg = `<svg viewBox="0 0 ${W} ${specH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
-      specSvg += window.VisualMath.axes(W, specH, specH - 24, "f", "|Sп(f)|/U0");
+      let specSvg = `<svg viewBox="0 0 ${W} ${specH}" width="100%" height="auto" class="stage-panel__visuals-svg spectrum-plot spectrum-plot--schematic">`;
+      specSvg += window.VisualMath.axes(W, specH, specH - 24, "f, кГц", "B(f), норм.", {
+        xMin: 0, xMax: fMaxKhz, yMin: 0, yMax: 1.08, note: "схематически, нормировано"
+      });
       specSvg += window.VisualMath.drawXYCurve(envelope, W, specH, 0, xUnitMax, 0, 1.08, "#7554aa", 2.4, 0.82);
-      for (let unit = 1; unit <= xUnitMax; unit++) {
+      const importantUnits = [...new Set([1, 2, 3, mu, 2 * mu])].filter((unit) => unit > 0 && unit <= xUnitMax);
+      importantUnits.forEach((unit) => {
         const amp = sinc(unit) * (0.86 + 0.1 * Math.cos(unit * Math.PI / 2));
         const x = xSpec(unit);
-        specSvg += `<line x1="${x}" y1="${specH - 24}" x2="${x}" y2="${ySpec(amp)}" stroke="#1f2b26" stroke-width="${unit % 4 === 0 ? 2.6 : 1.8}" />
-          <circle cx="${x}" cy="${ySpec(amp)}" r="2.6" fill="#1f2b26" />`;
-      }
-      [...new Set([1, 2, 3, mu, 2 * mu])].filter((unit) => unit <= xUnitMax).forEach((unit) => {
-        const label = unit === mu ? "1/τсим" : unit === 2 * mu ? "2/τсим" : `${unit}/Δt`;
-        specSvg += `<line x1="${xSpec(unit)}" y1="${specH - 24}" x2="${xSpec(unit)}" y2="${specH - 12}" stroke="#1f2b26" stroke-width="1.3" />
-          <text x="${xSpec(unit)}" y="${specH - 4}" fill="#31433b" font-family="monospace" font-size="12" text-anchor="middle">${label}</text>`;
+        specSvg += `<line x1="${x}" y1="${specH - 24}" x2="${x}" y2="${ySpec(amp)}" stroke="#1f2b26" stroke-width="${unit === mu || unit === 2 * mu ? 2.5 : 1.8}" />`;
       });
-      specSvg += `<line x1="${xSpec(mu)}" y1="20" x2="${xSpec(mu)}" y2="${specH - 24}" stroke="#e74c3c" stroke-width="1.8" stroke-dasharray="6,6" />`;
+      specSvg += `<line x1="${xSpec(mu)}" y1="28" x2="${xSpec(mu)}" y2="${specH - 24}" stroke="#62716b" stroke-width="1.3" stroke-dasharray="5,7" />
+        <text class="plot-note" x="${xSpec(mu)}" y="22" text-anchor="middle">1/τсим</text>
+        <line x1="${xSpec(2 * mu)}" y1="28" x2="${xSpec(2 * mu)}" y2="${specH - 24}" stroke="#e74c3c" stroke-width="1.8" stroke-dasharray="6,6" />
+        <text class="plot-note" x="${xSpec(2 * mu)}" y="22" text-anchor="middle">Δfц</text>`;
       specSvg += `</svg>`;
       const p0 = SignalData.bit_probabilities?.zero ?? 0.5;
       const p1 = SignalData.bit_probabilities?.one ?? 0.5;
@@ -176,19 +207,20 @@
         <line x1="${W * 0.16}" y1="${probH - 24 - 0.5 * (probH - 46)}" x2="${W * 0.86}" y2="${probH - 24 - 0.5 * (probH - 46)}" stroke="#e74c3c" stroke-width="1.6" stroke-dasharray="6,6" />`;
       probSvg += `</svg>`;
       const zoomScale = `<dl class="visual-scale"><div><dt>Окно</dt><dd>биты ${zoom.start + 1}-${zoom.end}</dd></div><div><dt>Отсчёт</dt><dd>Δt=${dt.toFixed(4)} мс</dd></div><div><dt>Символ</dt><dd>τсим=${tauSim.toFixed(4)} мс</dd></div><div><dt>Код</dt><dd>${mu} бит на один уровень</dd></div></dl>`;
-      const spectrumScale = `<dl class="visual-scale"><div><dt>Огибающая</dt><dd>sin x / x</dd></div><div><dt>Первый ноль</dt><dd>1/τсим=${(1 / tauSim).toFixed(2)} кГц</dd></div><div><dt>Расчетная полоса</dt><dd>Δfц=${(2 / tauSim).toFixed(2)} кГц</dd></div></dl>`;
+      const spectrumScale = `<dl class="visual-scale"><div><dt>Спектр</dt><dd>B(f), нормировано</dd></div><div><dt>Первый ноль</dt><dd>1/τсим=${(1 / tauSim).toFixed(2)} кГц</dd></div><div><dt>Полоса</dt><dd>Δfц=${(2 / tauSim).toFixed(2)} кГц</dd></div></dl>`;
       const probScale = `<dl class="visual-scale"><div><dt>p(0)</dt><dd>${p0.toFixed(4)}</dd></div><div><dt>p(1)</dt><dd>${p1.toFixed(4)}</dd></div><div><dt>Ожидание</dt><dd>для симметричного гауссовского входа близко к 0.5</dd></div></dl>`;
 
       const codeTableCollapsible = `<details class="visual-step"><summary class="visual-step__summary"><span>Таблица</span><strong>Показать таблицу кодов</strong></summary><div class="visual-step__body">${codeTable}</div></details>`;
       const distanceTableCollapsible = `<details class="visual-step"><summary class="visual-step__summary"><span>Матрица</span><strong>Показать матрицу расстояний</strong></summary><div class="visual-step__body">${distanceTable}</div></details>`;
+      const meanderCollapsible = `<details class="visual-step"><summary class="visual-step__summary"><span>Меандр</span><strong>Показать битовую временную диаграмму</strong></summary><div class="visual-step__body">${zoomScale}${zoomSvg}</div></details>`;
 
       return `<div class="stage-panel__visuals-stack">
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Маппинг квантованных уровней в ${mu}-битные коды</p>${codeStrip}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Квантованный уровень v_k^j → ${mu}-разрядное кодовое слово b_k^μ</p>${tapeScale}${codeTapeSvg}</div>
         <div class="stage-panel__visuals-layer">${codeTableCollapsible}</div>
         <div class="stage-panel__visuals-layer">${distanceTableCollapsible}</div>
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Априорные вероятности битов p(0) и p(1)</p>${probScale}${probSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Цифровой меандр b(t): ${mu} символов τсим на один Δt</p>${zoomScale}${zoomSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Амплитудный спектр прямоугольного цифрового сигнала</p>${spectrumScale}${specSvg}</div>
+        <div class="stage-panel__visuals-layer">${meanderCollapsible}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Линейчатый нормированный спектр B(f)</p>${spectrumScale}${specSvg}</div>
       </div>`;
     },
 

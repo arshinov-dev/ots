@@ -88,12 +88,16 @@
       }
     },
     renderSVG: function(id, params, helpers, SignalData) {
-      const { W, H, getX, getLocalY, yZero, drawStemsSVG } = helpers;
+      const { W, getLocalY } = helpers;
       const { mu } = (SignalData.calculation || window.SystemCalculations.calculate(params)).coding;
-      const stepSize = window.VisualMath.getSampleStep(params);
-      const zoom = window.VisualMath.getZoomWindow(SignalData, 5);
-      const wordStart = Math.floor(zoom.start / mu);
-      const wordEnd = Math.min(SignalData.received_code_words.length, Math.ceil(zoom.end / mu) + 2);
+      const vm = window.VisualMath;
+      const shownWordCount = Math.min(10, SignalData.received_code_words.length);
+      const wordWindow = vm.chooseDynamicWindow(SignalData.decoded_indices, {
+        minLength: Math.min(6, shownWordCount),
+        length: shownWordCount
+      });
+      const wordStart = wordWindow.start;
+      const wordEnd = wordWindow.end;
       const codeRows = SignalData.received_code_words.slice(wordStart, wordEnd).map((word, offset) => {
         const index = wordStart + offset;
         const original = SignalData.original_code_words[index] || "0".repeat(mu);
@@ -119,17 +123,25 @@
 
       let decH = 200, decY0 = getLocalY(0, decH);
       let decSVG = `<svg viewBox="0 0 ${W} ${decH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
-      decSVG += `<line x1="0" y1="${decY0}" x2="${W}" y2="${decY0}" stroke="#d5ddd8" stroke-width="2" />`;
+      decSVG += vm.axes(W, decH, decY0, "kΔt", "x̂(t), В", {
+        xMin: wordStart + 1,
+        xMax: wordEnd,
+        yMin: SignalData.yMin,
+        yMax: SignalData.yMax
+      });
 
-      let errorRects = "";
       let originalStepD = "";
       let recoveredStepD = "";
-      for (let i = 0; i < SignalData.v_hat.length; i++) {
-        const x1 = getX(i * stepSize);
-        const x2 = getX(Math.min((i + 1) * stepSize, SignalData.N - 1));
-        const yOriginal = getLocalY(SignalData.quantized_v[i] ?? 0, decH);
-        const yRecovered = getLocalY(SignalData.v_hat[i], decH);
-        if (i === 0) {
+      let errorMarks = "";
+      const visibleWords = Math.max(1, wordEnd - wordStart);
+      const wordWidth = W / visibleWords;
+      for (let offset = 0; offset < visibleWords; offset++) {
+        const i = wordStart + offset;
+        const x1 = offset * wordWidth;
+        const x2 = (offset + 1) * wordWidth;
+        const yOriginal = getLocalY(SignalData.quantized_v[i] ?? SignalData.v_hat[i] ?? 0, decH);
+        const yRecovered = getLocalY(SignalData.v_hat[i] ?? 0, decH);
+        if (offset === 0) {
           originalStepD = `M ${x1} ${yOriginal}`;
           recoveredStepD = `M ${x1} ${yRecovered}`;
         } else {
@@ -139,19 +151,25 @@
         originalStepD += ` L ${x2} ${yOriginal}`;
         recoveredStepD += ` L ${x2} ${yRecovered}`;
         if (SignalData.v_hat[i] !== SignalData.quantized_v[i]) {
-          errorRects += `<rect x="${x1}" y="${Math.min(yOriginal, yRecovered)}" width="${x2 - x1}" height="${Math.abs(yOriginal - yRecovered)}" fill="rgba(231, 76, 60, 0.38)" />`;
+          const errorX = (x1 + x2) / 2;
+          errorMarks += `<line x1="${errorX}" y1="${yOriginal}" x2="${errorX}" y2="${yRecovered}" stroke="#e74c3c" stroke-width="2.4" />
+            <circle cx="${errorX}" cy="${yOriginal}" r="3.2" fill="#287c9f" />
+            <circle cx="${errorX}" cy="${yRecovered}" r="3.2" fill="#0c6b4f" />`;
         }
       }
-      decSVG += errorRects;
       decSVG += `<path d="${originalStepD}" stroke="#287c9f" stroke-width="2.2" fill="none" stroke-opacity="0.24" stroke-linejoin="round" />`;
       decSVG += `<path d="${recoveredStepD}" stroke="#0c6b4f" stroke-width="3" fill="none" stroke-linejoin="round" />`;
+      decSVG += errorMarks;
       decSVG += `</svg>`;
-      const scaleNote = `<dl class="visual-scale"><div><dt>Шум передачи</dt><dd>ξп²≈${(SignalData.transmission_noise_analytic_sq || 0).toFixed(4)} В²</dd></div><div><dt>Масштаб</dt><dd>та же амплитудная шкала, что у исходного сообщения</dd></div></dl>`;
-      const codeScale = `<dl class="visual-scale"><div><dt>Операция</dt><dd>b̂_i=b_i⊕E_i</dd></div><div><dt>Ошибочных слов</dt><dd>${SignalData.chunkErrors.length}</dd></div></dl>`;
+      const errorsInWindow = SignalData.received_code_words.slice(wordStart, wordEnd)
+        .filter((word, offset) => word !== SignalData.original_code_words[wordStart + offset]).length;
+      const scaleNote = `<dl class="visual-scale"><div><dt>Фрагмент</dt><dd>${visibleWords} уровней</dd></div><div><dt>Передано / восстановлено</dt><dd>синий / зелёный</dd></div><div><dt>Ошибки</dt><dd>${errorsInWindow} в окне</dd></div></dl>`;
+      const codeScale = `<dl class="visual-scale"><div><dt>Цепочка</dt><dd>b̂_k^μ → v̂_k^j → x̂(t)</dd></div><div><dt>Разрядность</dt><dd>μ=${mu}</dd></div><div><dt>Слова</dt><dd>${wordStart + 1}–${wordEnd}</dd></div></dl>`;
+      const errorDetails = `<details class="visual-step"><summary class="visual-step__summary"><span>Ошибки</span><strong>Показать вектор битовых ошибок E_i</strong></summary><div class="visual-step__body">${codeScale}${errSvg}</div></details>`;
       return `<div class="stage-panel__visuals-stack">
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Вектор битовых ошибок E_i</p>${codeScale}${errSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Декодирование принятых кодовых слов</p>${codeTable}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header"><strong style="color:#0c6b4f">Восстановленные уровни x̂(t)</strong></p>${scaleNote}${decSVG}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">b̂_k^μ → v̂_k^j: декодирование принятых слов</p>${codeScale}${codeTable}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">v̂_k^j → x̂(t): ступенчатая интерполяция ЦАП</p>${scaleNote}${decSVG}<div class="stage-panel__info-box">Ступени появляются после декодирования и интерполяции ЦАП.</div></div>
+        <div class="stage-panel__visuals-layer">${errorDetails}</div>
       </div>`;
     },
     renderTheory: function(stage, params, toLatexNumber, SignalData) {

@@ -80,49 +80,66 @@
     },
 
     renderSVG: function(id, params, helpers, SignalData) {
-      const { W, H, getX, getY, yZero, drawCurveSVG } = helpers;
-      const stepSize = window.VisualMath.getSampleStep(params);
+      const { W, H, yZero } = helpers;
+      const vm = window.VisualMath;
+      const stepSize = vm.getSampleStep(params);
       const Pg = parseFloat(params.signalPower) || 1.5;
       const calc = SignalData.calculation || window.SystemCalculations.calculate(params);
       const dfg = calc.input.dfg;
-      const halfWindow = SignalData.lpf_half_window || 60;
+      const acceptableError = parseFloat(params.acceptableError) || 0.12;
+      const shownStepCount = Math.min(10, SignalData.v_hat.length);
+      const stepWindow = vm.chooseDynamicWindow(SignalData.v_hat, {
+        minLength: Math.min(6, shownStepCount),
+        length: shownStepCount
+      });
+      const startIndex = Math.min(SignalData.N - 1, stepWindow.start * stepSize);
+      const endIndex = Math.min(SignalData.N - 1, Math.max(startIndex + 1, stepWindow.end * stepSize));
+      const timeStart = vm.indexToTimeMs(startIndex, SignalData.N, params);
+      const timeEnd = vm.indexToTimeMs(endIndex, SignalData.N, params);
+      const sx = (index) => ((vm.indexToTimeMs(index, SignalData.N, params) - timeStart) / (timeEnd - timeStart)) * W;
+      const sy = (value) => H - ((value - SignalData.yMin) / (SignalData.yMax - SignalData.yMin)) * H;
+      const curveSamples = (values) => values.slice(startIndex, endIndex + 1).map((value, offset) => [
+        vm.indexToTimeMs(startIndex + offset, SignalData.N, params),
+        value
+      ]);
 
       // --- Ступенчатый сигнал x̂(t) ---
       let stepSvg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
-      stepSvg += `<line x1="0" y1="${yZero}" x2="${W}" y2="${yZero}" stroke="#d5ddd8" stroke-width="2" />`;
-      let stepD = `M 0 ${getY(SignalData.x_hat_t[0])}`;
-      for (let i = 0; i < SignalData.N; i += stepSize) {
-        const x1 = getX(i);
-        const x2 = getX(Math.min(i + stepSize, SignalData.N - 1));
-        const y = getY(SignalData.x_hat_t[i]);
-        if (i === 0) stepD = `M ${x1} ${y}`;
+      stepSvg += vm.axes(W, H, yZero, "t, мс", "u(t), В", {
+        xMin: timeStart, xMax: timeEnd, yMin: SignalData.yMin, yMax: SignalData.yMax
+      });
+      let stepD = "";
+      for (let wordIndex = stepWindow.start; wordIndex < stepWindow.end; wordIndex++) {
+        const i = Math.min(SignalData.N - 1, wordIndex * stepSize);
+        const next = Math.min(endIndex, (wordIndex + 1) * stepSize);
+        const x1 = sx(i);
+        const x2 = sx(next);
+        const y = sy(SignalData.v_hat[wordIndex] ?? 0);
+        if (!stepD) stepD = `M ${x1} ${y}`;
         else stepD += ` L ${x1} ${y}`;
         stepD += ` L ${x2} ${y}`;
       }
-      stepSvg += drawCurveSVG(SignalData.g_t, '#287c9f', 1.8, 0.32);
       stepSvg += `<path d="${stepD}" stroke="#0c6b4f" stroke-width="2.8" fill="none" stroke-linejoin="round" />`;
+      stepSvg += vm.drawXYCurve(curveSamples(SignalData.g_hat_t), W, H, timeStart, timeEnd, SignalData.yMin, SignalData.yMax, '#7554aa', 2.6, 0.9);
       stepSvg += `</svg>`;
 
       // --- Сравнение g(t) и ĝ(t) ---
       let overlaySvg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
-      overlaySvg += `<line x1="0" y1="${yZero}" x2="${W}" y2="${yZero}" stroke="#d5ddd8" stroke-width="2" />`;
-      let areaD = `M ${getX(0)} ${getY(SignalData.g_t[0])}`;
-      for (let i = 1; i < SignalData.N; i++) areaD += ` L ${getX(i)} ${getY(SignalData.g_t[i])}`;
-      for (let i = SignalData.N - 1; i >= 0; i--) areaD += ` L ${getX(i)} ${getY(SignalData.g_hat_t[i])}`;
-      areaD += ` Z`;
-      overlaySvg += `<path d="${areaD}" fill="rgba(231, 76, 60, 0.25)" stroke="none" />`;
-      overlaySvg += drawCurveSVG(SignalData.g_t, '#287c9f', 2.2);
-      overlaySvg += drawCurveSVG(SignalData.g_hat_t, '#7554aa', 3);
+      overlaySvg += vm.axes(W, H, yZero, "t, мс", "u(t), В", {
+        xMin: timeStart, xMax: timeEnd, yMin: SignalData.yMin, yMax: SignalData.yMax
+      });
+      overlaySvg += vm.drawXYCurve(curveSamples(SignalData.g_t), W, H, timeStart, timeEnd, SignalData.yMin, SignalData.yMax, '#287c9f', 2.2);
+      overlaySvg += vm.drawXYCurve(curveSamples(SignalData.g_hat_t), W, H, timeStart, timeEnd, SignalData.yMin, SignalData.yMax, '#7554aa', 3);
       overlaySvg += `</svg>`;
 
       // --- Компактная форма АЧХ идеального ФНЧ ---
-      const filterNote = `<div class="stage-panel__info-box">Амплитудно-частотная характеристика приёмного ФНЧ: \[ |K(f)|=\begin{cases}1,&|f|\le\Delta f_g\\0,&|f|>\Delta f_g\end{cases},\quad \Delta f_g=${dfg.toFixed(2)}\text{ кГц}. \]</div>`;
+      const filterNote = `<div class="stage-panel__info-box">\( |K(f)|=1 \) при \( |f|\le\Delta f_g \), иначе \(0\); \(\Delta f_g=${dfg.toFixed(2)}\) кГц.</div>`;
 
       // --- Составляющие ошибки ---
       const components = SignalData.delta_sum_components || {};
       const componentRows = [
-        { label: "εф²", value: components.filterAbs || 0, color: "#287c9f" },
-        { label: "εкв²", value: components.quantAbs || 0, color: "#0c6b4f" },
+        { label: "ξф²", value: components.filterAbs || 0, color: "#287c9f" },
+        { label: "ξкв²", value: components.quantAbs || 0, color: "#0c6b4f" },
         { label: "ξп²", value: components.transmissionAbs || 0, color: "#e74c3c" },
       ];
       const maxComponent = Math.max(...componentRows.map((item) => item.value), 1e-9);
@@ -139,14 +156,14 @@
       });
       compSvg += `</svg>`;
 
-      const stepScale = `<dl class="visual-scale"><div><dt>Вход ЦАП</dt><dd>x̂(t) из блока 09</dd></div><div><dt>Интерполяция</dt><dd>ступенчатая: g₀(t)=1 при 0≤t≤T</dd></div><div><dt>Сравнение</dt><dd>бледная кривая: g(t)</dd></div></dl>`;
-      const compareScale = `<dl class="visual-scale"><div><dt>Синяя</dt><dd>исходное сообщение g(t)</dd></div><div><dt>Фиолетовая</dt><dd>восстановленное ĝ(t)</dd></div><div><dt>Красная область</dt><dd>g(t)-ĝ(t)</dd></div></dl>`;
-      const errorScale = `<dl class="visual-scale"><div><dt>Визуально</dt><dd>δвиз²=${(SignalData.visual_delta_sq || 0).toFixed(4)}</dd></div><div><dt>Расчетно</dt><dd>δΣ²=${(SignalData.delta_sum_sq || 0).toFixed(4)}</dd></div><div><dt>Нормировка</dt><dd>Pg=${Pg.toFixed(4)} В²</dd></div></dl>`;
+      const isSuccess = (SignalData.delta_sum_sq || 0) <= acceptableError;
+      const stepScale = `<dl class="visual-scale"><div><dt>Ступени</dt><dd>x̂(t), ${stepWindow.length} уровней</dd></div><div><dt>Сглаживание</dt><dd>ĝ(t)</dd></div><div><dt>Общее окно</dt><dd>${(timeEnd - timeStart).toFixed(3)} мс</dd></div></dl>`;
+      const compareScale = `<dl class="visual-scale"><div><dt>Синяя</dt><dd>исходное g(t)</dd></div><div><dt>Фиолетовая</dt><dd>восстановленное ĝ(t)</dd></div><div><dt>Окно</dt><dd>совпадает с x̂(t)</dd></div></dl>`;
+      const errorScale = `<dl class="visual-scale"><div><dt>Итог</dt><dd>δΣ²=${(SignalData.delta_sum_sq || 0).toFixed(4)}</dd></div><div><dt>Допуск</dt><dd>δдоп²=${acceptableError.toFixed(4)}</dd></div><div><dt>Результат</dt><dd>${isSuccess ? "норма" : "требуется корректировка"}</dd></div></dl>`;
       return `<div class="stage-panel__visuals-stack">
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Ступенчатый сигнал после декодера x̂(t)</p>${stepScale}${stepSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">АЧХ идеального приёмного ФНЧ</p>${filterNote}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">x̂(t) после интерполяции → сглаженный сигнал ĝ(t)</p>${stepScale}${stepSvg}${filterNote}</div>
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Финальное сравнение g(t) и ĝ(t)</p>${compareScale}${overlaySvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Составляющие итоговой среднеквадратической ошибки</p>${errorScale}${compSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">ξф², ξкв², ξп² и официальная итоговая ошибка</p>${errorScale}${compSvg}</div>
       </div>`;
     },
 
@@ -160,13 +177,11 @@
       const filterAbs = components.filterAbs ?? SignalData.filter_error_analytic_abs ?? 0;
       const quantAbs = components.quantAbs ?? SignalData.quantization_error_analytic_sq ?? 0;
       const transmissionAbs = components.transmissionAbs ?? SignalData.transmission_noise_analytic_sq ?? 0;
-      const visualDelta = SignalData.visual_delta_sq || 0;
       const theory = "Приёмный ФНЧ превращает восстановленные уровни ЦАП в непрерывную оценку сообщения. Модель: ступенчатый интерполятор с g₀(t) = 1 при t ∈ [0, T], затем идеальный ФНЧ с полосой Δfg.";
       let formulas = `<div class="formula-preview"><span>Ступенчатая интерполяция ЦАП</span>\\[ \\hat{x}(t)=\\sum_k \\hat{v}_k g_0(t-k\\Delta t),\\quad g_0(t)=\\begin{cases}1,&0\\le t\\le\\Delta t\\\\0,&\\text{иначе}\\end{cases} \\]</div>`;
-      formulas += `<div class="formula-preview"><span>Идеальный приёмный ФНЧ</span>\\[ |K(f)|=\\begin{cases}1,&|f|\\le\\Delta f_g\\\\0,&|f|>\\Delta f_g\\end{cases},\\quad \\hat{g}(t)=\\int_{-\\infty}^{\\infty}\\hat{x}(\\lambda)h_\\text{ФНЧ}(t-\\lambda)d\\lambda \\]</div>`;
-      formulas += `<div class="formula-preview"><span>Импульсная характеристика идеального ФНЧ</span>\\[ h(t)=2\\Delta f_g\\cdot\\text{sinc}(2\\Delta f_g t),\\quad \\text{sinc}(x)=\\frac{\\sin(\\pi x)}{\\pi x} \\]</div>`;
+      formulas += `<div class="formula-preview"><span>Идеальный приёмный ФНЧ</span>\\[ |K(f)|=\\begin{cases}1,&|f|\\le\\Delta f_g\\\\0,&|f|>\\Delta f_g\\end{cases} \\]</div>`;
+      formulas += `<details class="visual-step"><summary class="visual-step__summary"><span>ФНЧ</span><strong>Показать импульсную характеристику</strong></summary><div class="visual-step__body"><div class="formula-preview"><span>Импульсная характеристика идеального ФНЧ</span>\\[ h(t)=2\\Delta f_g\\cdot\\text{sinc}(2\\Delta f_g t),\\quad \\text{sinc}(x)=\\frac{\\sin(\\pi x)}{\\pi x} \\]</div></div></details>`;
       formulas += `<div class="formula-preview"><span>Итоговая расчетная ошибка</span>\\[ \\delta_\\Sigma^2 = \\frac{\\varepsilon_ф^2 + \\varepsilon_{кв}^2 + \\xi_{п}^2}{P_g} = \\frac{${toLatexNumber(filterAbs.toFixed(4))} + ${toLatexNumber(quantAbs.toFixed(4))} + ${toLatexNumber(transmissionAbs.toFixed(4))}}{${toLatexNumber(Pg)}} = ${toLatexNumber(delta_sum_sq.toFixed(4))} \\]</div>`;
-      formulas += `<div class="formula-preview"><span>Ошибка на отрисованной реализации</span>\\[ \\delta_\\text{виз}^2=\\frac{1}{NP_g}\\sum_{i=1}^{N}\\left(g_i-\\hat{g}_i\\right)^2=${toLatexNumber(visualDelta.toFixed(4))} \\]</div>`;
       const isSuccess = delta_sum_sq <= acceptableError;
       formulas += `<div class="stage-panel__info-box ${isSuccess ? 'stage-panel__info-box--success' : 'stage-panel__info-box--error'}"><strong>Сравнение с допуском:</strong><br>\\( \\delta_\\Sigma^2 = ${toLatexNumber(delta_sum_sq.toFixed(4))} \\), \\( \\delta_{доп}^2 = ${toLatexNumber(acceptableError)} \\)<br>${isSuccess ? '<span style="color: #0c6b4f; font-weight: bold;">НОРМА</span>' : '<span style="color: #e74c3c; font-weight: bold;">ТРЕБУЕТСЯ КОРРЕКТИРОВКА</span>'}</div>`;
       return { theory, formulas };

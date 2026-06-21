@@ -196,6 +196,48 @@
       return { start, end: start + length, length, bits: bits.slice(start, start + length) };
     }
 
+    function chooseDynamicWindow(values, options = {}) {
+      const total = Array.isArray(values) ? values.length : 0;
+      if (!total) return { start: 0, end: 0, length: 0, values: [] };
+      const minLength = Math.min(total, Math.max(8, options.minLength || 80));
+      const targetLength = options.length || Math.round(total * (options.fraction || 0.28));
+      const length = Math.min(total, Math.max(minLength, targetLength));
+      if (length === total) return { start: 0, end: total, length, values: values.slice() };
+
+      let bestStart = 0;
+      let bestScore = -Infinity;
+      const stride = Math.max(1, Math.floor(length / 16));
+      const lastStart = total - length;
+      const candidateStarts = [];
+      for (let start = 0; start <= lastStart; start += stride) candidateStarts.push(start);
+      if (candidateStarts[candidateStarts.length - 1] !== lastStart) candidateStarts.push(lastStart);
+      candidateStarts.forEach((start) => {
+        let min = Infinity;
+        let max = -Infinity;
+        let variation = 0;
+        let turns = 0;
+        let previousDelta = 0;
+        for (let i = start; i < start + length; i++) {
+          const value = values[i];
+          min = Math.min(min, value);
+          max = Math.max(max, value);
+          if (i > start) {
+            const delta = value - values[i - 1];
+            variation += Math.abs(delta);
+            if (previousDelta && delta && Math.sign(delta) !== Math.sign(previousDelta)) turns++;
+            if (delta) previousDelta = delta;
+          }
+        }
+        const range = max - min;
+        const score = range + variation / length + (turns / length) * range;
+        if (score > bestScore) {
+          bestScore = score;
+          bestStart = start;
+        }
+      });
+      return { start: bestStart, end: bestStart + length, length, values: values.slice(bestStart, bestStart + length) };
+    }
+
     function correlationValue(tau, params) {
       const Pg = safeNumber(params.signalPower, 1.5);
       const beta = safeNumber(params.beta, 14);
@@ -241,42 +283,47 @@
 
     function axes(W, H, yZero, xLabel, yLabel, options = {}) {
       const yAxis = clamp(yZero, 18, H - 24);
-      let svg = `<rect x="1" y="1" width="${W - 2}" height="${H - 2}" fill="none" stroke="#1f2b26" stroke-width="1.4" />`;
-      for (let i = 1; i < 6; i++) {
-        const x = (W / 6) * i;
-        svg += `<line x1="${x}" y1="1" x2="${x}" y2="${H - 1}" stroke="#b8c0bc" stroke-width="1" />`;
-      }
-      for (let i = 1; i < 5; i++) {
-        const y = (H / 5) * i;
-        svg += `<line x1="1" y1="${y}" x2="${W - 1}" y2="${y}" stroke="#b8c0bc" stroke-width="1" />`;
-      }
-      svg += `<line x1="0" y1="${yAxis}" x2="${W}" y2="${yAxis}" stroke="#1f2b26" stroke-width="1.8" />
-        <line x1="2" y1="0" x2="2" y2="${H}" stroke="#1f2b26" stroke-width="1.8" />
-        <path d="M ${W - 10} ${yAxis - 4} L ${W} ${yAxis} L ${W - 10} ${yAxis + 4}" fill="none" stroke="#1f2b26" stroke-width="1.8" />
-        <path d="M -2 10 L 2 0 L 6 10" fill="none" stroke="#1f2b26" stroke-width="1.8" />
-        <text x="${W - 36}" y="${Math.max(18, yAxis - 12)}" fill="#31433b" font-family="monospace" font-size="15">${xLabel}</text>
-        <text x="14" y="24" fill="#31433b" font-family="monospace" font-size="15">${yLabel}</text>`;
+      const formatTick = (value) => {
+        const magnitude = Math.abs(value);
+        const digits = magnitude >= 10 ? 0 : magnitude >= 1 ? 1 : 2;
+        return Number(value.toFixed(digits)).toString();
+      };
+      let svg = `<rect class="plot-frame" x="1" y="1" width="${W - 2}" height="${H - 2}" />
+        <line class="plot-grid" x1="${W / 2}" y1="1" x2="${W / 2}" y2="${H - 1}" />
+        <line class="plot-grid" x1="1" y1="${H / 2}" x2="${W - 1}" y2="${H / 2}" />
+        <line class="plot-axis" x1="0" y1="${yAxis}" x2="${W}" y2="${yAxis}" />
+        <line class="plot-axis" x1="2" y1="0" x2="2" y2="${H}" />
+        <path class="plot-axis-arrow" d="M ${W - 10} ${yAxis - 4} L ${W} ${yAxis} L ${W - 10} ${yAxis + 4}" />
+        <path class="plot-axis-arrow" d="M -2 10 L 2 0 L 6 10" />
+        <text class="plot-axis-label" x="${W - 12}" y="${Math.max(18, yAxis - 12)}" text-anchor="end">${xLabel}</text>
+        <text class="plot-axis-label" x="14" y="24">${yLabel}</text>`;
 
       // Числовые отметки: не больше трёх по каждой оси
       const { xMin, xMax, yMin, yMax } = options;
       if (Number.isFinite(xMin) && Number.isFinite(xMax)) {
-        const xPositions = [0, W / 2, W];
+        const xPositions = [2, W / 2, W - 2];
         const xValues = [xMin, (xMin + xMax) / 2, xMax];
+        const textAnchors = ["start", "middle", "end"];
         xPositions.forEach((x, i) => {
-          svg += `<line x1="${x}" y1="${yAxis}" x2="${x}" y2="${yAxis + 5}" stroke="#1f2b26" stroke-width="1.4" />`;
-          svg += `<text x="${x}" y="${yAxis + 18}" fill="#62716b" font-family="monospace" font-size="11" text-anchor="middle">${Number(xValues[i]).toFixed(1)}</text>`;
+          svg += `<line class="plot-tick" x1="${x}" y1="${yAxis}" x2="${x}" y2="${yAxis + 5}" />`;
+          svg += `<text class="plot-tick-label" x="${x}" y="${yAxis + 18}" text-anchor="${textAnchors[i]}">${formatTick(xValues[i])}</text>`;
         });
       }
       if (Number.isFinite(yMin) && Number.isFinite(yMax)) {
+        const middleValue = yMin < 0 && yMax > 0 ? 0 : (yMin + yMax) / 2;
+        const middleY = H - ((middleValue - yMin) / (yMax - yMin)) * H;
         const yTicks = [
-          { y: H - 6, value: yMin },
-          { y: 10, value: yMax },
+          { y: H - 2, value: yMin },
+          { y: clamp(middleY, 2, H - 2), value: middleValue },
+          { y: 2, value: yMax },
         ];
-        if (yMin < 0 && yMax > 0) yTicks.push({ y: yAxis, value: 0 });
         yTicks.forEach(({ y, value }) => {
-          svg += `<line x1="0" y1="${y}" x2="5" y2="${y}" stroke="#1f2b26" stroke-width="1.4" />`;
-          svg += `<text x="8" y="${y + 4}" fill="#62716b" font-family="monospace" font-size="11">${Number(value).toFixed(2)}</text>`;
+          svg += `<line class="plot-tick" x1="0" y1="${y}" x2="5" y2="${y}" />`;
+          svg += `<text class="plot-tick-label" x="8" y="${clamp(y + 4, 11, H - 4)}">${formatTick(value)}</text>`;
         });
+      }
+      if (options.note) {
+        svg += `<text class="plot-note" x="${W - 12}" y="18" text-anchor="end">${options.note}</text>`;
       }
       return svg;
     }
@@ -310,7 +357,7 @@
       return svg;
     }
 
-    return { clamp, safeNumber, getSampleStep, getTimeSpanMs, indexToTimeMs, hashNoise, deterministicNormal, getCorrelationKind, getCorrelationMeta, normalCdf, laplacePhi, getAnalyticFilterError, getSpectrumWindow, getEta, getLevelProbabilitiesAnalytic, getZoomWindow, correlationValue, spectrumValue, axes, drawXYCurve, makeSamples, chartSvg };
+    return { clamp, safeNumber, getSampleStep, getTimeSpanMs, indexToTimeMs, hashNoise, deterministicNormal, getCorrelationKind, getCorrelationMeta, normalCdf, laplacePhi, getAnalyticFilterError, getSpectrumWindow, getEta, getLevelProbabilitiesAnalytic, getZoomWindow, chooseDynamicWindow, correlationValue, spectrumValue, axes, drawXYCurve, makeSamples, chartSvg };
   })();
 
   window.StageHandlers.source = {
@@ -375,48 +422,70 @@
     },
 
     renderSVG: function(id, params, helpers, SignalData) {
-      const { W, H, getY, yZero, drawCurveSVG } = helpers;
+      const { W, H, getY, yZero } = helpers;
       const vm = window.VisualMath;
       const Pg = vm.safeNumber(params.signalPower, 1.5);
       const beta = vm.safeNumber(params.beta, 14);
       const dfg = vm.safeNumber(params.signalBandwidth, 28);
       const sigmaG = Math.sqrt(Pg);
 
+      const dynamicWindow = vm.chooseDynamicWindow(SignalData.g_t, {
+        minLength: Math.min(96, SignalData.g_t.length),
+        length: Math.min(240, Math.max(96, Math.round(SignalData.g_t.length * 0.28)))
+      });
+      const timeStart = vm.indexToTimeMs(dynamicWindow.start, SignalData.g_t.length, params);
+      const timeEnd = vm.indexToTimeMs(Math.max(dynamicWindow.start, dynamicWindow.end - 1), SignalData.g_t.length, params);
+      const timeSamples = dynamicWindow.values.map((value, index) => [
+        vm.indexToTimeMs(dynamicWindow.start + index, SignalData.g_t.length, params),
+        value
+      ]);
       let timeSvg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
-      timeSvg += vm.axes(W, H, yZero, "t, мс", "g(t), В", { xMin: 0, xMax: vm.getTimeSpanMs(params), yMin: SignalData.yMin, yMax: SignalData.yMax });
-      const yPlus = getY(3 * sigmaG);
-      const yMinus = getY(-3 * sigmaG);
-      timeSvg += `<line x1="0" y1="${yPlus}" x2="${W}" y2="${yPlus}" stroke="#d5ddd8" stroke-dasharray="8,8" stroke-width="1.5" />`;
-      timeSvg += `<line x1="0" y1="${yMinus}" x2="${W}" y2="${yMinus}" stroke="#d5ddd8" stroke-dasharray="8,8" stroke-width="1.5" />`;
-      timeSvg += drawCurveSVG(SignalData.g_t, '#287c9f', 2.5);
+      timeSvg += vm.axes(W, H, yZero, "t, мс", "g(t), В", { xMin: timeStart, xMax: timeEnd, yMin: SignalData.yMin, yMax: SignalData.yMax });
+      const yPlus = getY(sigmaG);
+      const yMinus = getY(-sigmaG);
+      timeSvg += `<line x1="0" y1="${yPlus}" x2="${W}" y2="${yPlus}" stroke="#b8c4be" stroke-dasharray="6,7" stroke-width="1.2" />
+        <line x1="0" y1="${yMinus}" x2="${W}" y2="${yMinus}" stroke="#b8c4be" stroke-dasharray="6,7" stroke-width="1.2" />
+        <text class="plot-note" x="${W - 12}" y="${yPlus - 6}" text-anchor="end">+σg</text>
+        <text class="plot-note" x="${W - 12}" y="${yMinus - 6}" text-anchor="end">−σg</text>
+        <text class="plot-note" x="12" y="${yZero - 7}">M{g}=0</text>`;
+      timeSvg += vm.drawXYCurve(timeSamples, W, H, timeStart, timeEnd, SignalData.yMin, SignalData.yMax, '#287c9f', 2.5);
       timeSvg += `</svg>`;
 
       const tauMax = Math.max(0.18, 4 / Math.max(beta, 1));
       const corrSamples = vm.makeSamples(-tauMax, tauMax, 220, (tau) => vm.correlationValue(tau, params));
+      const corrYMin = -Pg * 0.25;
+      const corrYMax = Pg * 1.08;
+      const corrPeakY = 220 - ((Pg - corrYMin) / (corrYMax - corrYMin)) * 220;
+      const corrExtra = `<circle cx="${W / 2}" cy="${corrPeakY}" r="4" fill="#7554aa" />
+        <text class="plot-note" x="${W / 2 + 10}" y="${Math.max(16, corrPeakY - 8)}">Bc(0)=Pg</text>`;
       const corrSvg = vm.chartSvg({
-        W, H: 220, xMin: -tauMax, xMax: tauMax, yMin: -Pg * 0.25, yMax: Pg * 1.08,
-        xLabel: "τ, мс", yLabel: "B_c(τ), В²", samples: corrSamples, color: "#7554aa"
+        W, H: 220, xMin: -tauMax, xMax: tauMax, yMin: corrYMin, yMax: corrYMax,
+        xLabel: "τ, мс", yLabel: "B_c(τ), В²", samples: corrSamples, color: "#7554aa", extra: corrExtra
       });
 
       const fMax = Math.max(dfg * 2.4, beta * 4);
       const spectrumSamples = vm.makeSamples(-fMax, fMax, 260, (f) => vm.spectrumValue(f, params));
       const spectrumPeak = Math.max(...spectrumSamples.map(([, y]) => y), 0.0001);
       const dfgX = (f) => ((f + fMax) / (2 * fMax)) * W;
-      const spectrumExtra = `<line x1="${dfgX(-dfg)}" y1="18" x2="${dfgX(-dfg)}" y2="202" stroke="#e74c3c" stroke-width="1.5" stroke-dasharray="5,6" />
+      const spectrumExtra = `<rect x="${dfgX(-dfg)}" y="1" width="${dfgX(dfg) - dfgX(-dfg)}" height="218" fill="#e74c3c" opacity="0.06" />
+        <line x1="${dfgX(-dfg)}" y1="18" x2="${dfgX(-dfg)}" y2="202" stroke="#e74c3c" stroke-width="1.5" stroke-dasharray="5,6" />
         <line x1="${dfgX(dfg)}" y1="18" x2="${dfgX(dfg)}" y2="202" stroke="#e74c3c" stroke-width="1.5" stroke-dasharray="5,6" />
-        <line x1="${dfgX(-dfg)}" y1="28" x2="${dfgX(dfg)}" y2="28" stroke="#e74c3c" stroke-width="1.5" />`;
+        <line x1="${dfgX(-dfg)}" y1="28" x2="${dfgX(dfg)}" y2="28" stroke="#e74c3c" stroke-width="1.5" />
+        <text class="plot-note" x="${W / 2}" y="22" text-anchor="middle">Δfg</text>`;
       const spectrumSvg = vm.chartSvg({
         W, H: 220, xMin: -fMax, xMax: fMax, yMin: 0, yMax: spectrumPeak * 1.1,
         xLabel: "f, кГц", yLabel: "G_g(f), В²/кГц", samples: spectrumSamples, color: "#287c9f", extra: spectrumExtra
       });
       const pdfNote = `<div class="stage-panel__info-box">Одномерная плотность вероятности гауссовского сигнала: \\( W_g(u)=\\dfrac{1}{\\sigma_g\\sqrt{2\\pi}}\\exp\\left(-\\dfrac{u^2}{2\\sigma_g^2}\\right) \\), где \\( \\sigma_g=${sigmaG.toFixed(3)} \\) В.</div>`;
-      const sourceScale = `<dl class="visual-scale"><div><dt>Разброс амплитуд</dt><dd>±3σg=±${(3 * sigmaG).toFixed(3)} В</dd></div><div><dt>Полоса сообщения</dt><dd>Δfg=${dfg.toFixed(2)} кГц</dd></div><div><dt>Окно времени</dt><dd>${vm.getTimeSpanMs(params).toFixed(3)} мс</dd></div></dl>`;
+      const timeScale = `<dl class="visual-scale"><div><dt>Среднее</dt><dd>M{g}=0 В</dd></div><div><dt>СКО</dt><dd>σg=${sigmaG.toFixed(3)} В</dd></div><div><dt>Окно</dt><dd>${(timeEnd - timeStart).toFixed(3)} мс</dd></div></dl>`;
+      const corrScale = `<dl class="visual-scale"><div><dt>В нуле</dt><dd>Bc(0)=Pg=${Pg.toFixed(3)} В²</dd></div><div><dt>Параметр формы</dt><dd>β=${beta.toFixed(2)} мс⁻¹</dd></div><div><dt>Диапазон</dt><dd>±${tauMax.toFixed(3)} мс</dd></div></dl>`;
+      const spectrumScale = `<dl class="visual-scale"><div><dt>Полоса</dt><dd>Δfg=${dfg.toFixed(2)} кГц</dd></div><div><dt>Распределение</dt><dd>Gg(f), В²/кГц</dd></div></dl>`;
 
       return `<div class="stage-panel__visuals-stack">
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Временная диаграмма g(t)</p>${sourceScale}${timeSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Корреляционная функция B_c(τ)</p>${sourceScale}${corrSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Энергетический спектр G_g(f)</p>${sourceScale}${spectrumSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Плотность вероятности W_g(u)</p>${pdfNote}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">1. Временная реализация g(t)</p>${timeScale}${timeSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">2. Корреляционная функция Bc(τ)</p>${corrScale}${corrSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">3. Спектральная плотность Gg(f)</p>${spectrumScale}${spectrumSvg}</div>
+        <details class="stage-panel__visuals-layer"><summary class="stage-panel__visuals-header">Гауссовское распределение Wg(u)</summary>${pdfNote}</details>
       </div>`;
     },
 

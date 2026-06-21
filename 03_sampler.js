@@ -19,61 +19,91 @@
     },
 
     renderSVG: function(id, params, helpers, SignalData) {
-      const { W, H, getY, getX, yZero, drawCurveSVG, drawStemsSVG } = helpers;
+      const { W, H, yZero } = helpers;
       const alpha = parseFloat(params.samplingIncrease) || 2;
       const dfg = parseFloat(params.signalBandwidth) || 28;
       const fd = 2 * alpha * dfg;
       const dt = 1 / fd;
       const vm = window.VisualMath;
+      const visibleSampleCount = Math.min(16, SignalData.sampled_x_values.length);
+      const sampleWindow = vm.chooseDynamicWindow(SignalData.sampled_x_values, {
+        minLength: Math.min(10, visibleSampleCount),
+        length: visibleSampleCount
+      });
+      const visibleIndices = SignalData.sampled_x_indices.slice(sampleWindow.start, sampleWindow.end);
+      const visibleValues = SignalData.sampled_x_values.slice(sampleWindow.start, sampleWindow.end);
+      const startIndex = visibleIndices[0] || 0;
+      const lastVisibleIndex = visibleIndices.length ? visibleIndices[visibleIndices.length - 1] : startIndex;
+      const endIndex = lastVisibleIndex > startIndex ? lastVisibleIndex : Math.min(SignalData.x_t.length - 1, startIndex + 1);
+      const timeStart = vm.indexToTimeMs(startIndex, SignalData.x_t.length, params);
+      const timeEnd = vm.indexToTimeMs(endIndex, SignalData.x_t.length, params);
+      const continuousSamples = SignalData.x_t.slice(startIndex, endIndex + 1).map((value, index) => [
+        vm.indexToTimeMs(startIndex + index, SignalData.x_t.length, params),
+        value
+      ]);
+      const sxTime = (index) => ((vm.indexToTimeMs(index, SignalData.x_t.length, params) - timeStart) / (timeEnd - timeStart)) * W;
+      const syValue = (value) => H - ((value - SignalData.yMin) / (SignalData.yMax - SignalData.yMin)) * H;
       let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
-      svg += vm.axes(W, H, yZero, "t", "x(t)");
-      svg += drawCurveSVG(SignalData.x_t, '#0c6b4f', 2.6, 0.22);
-      svg += drawStemsSVG(SignalData.sampled_x_indices, SignalData.sampled_x_values, '#0c6b4f');
+      svg += vm.axes(W, H, yZero, "t, мс", "x(t), В", {
+        xMin: timeStart, xMax: timeEnd, yMin: SignalData.yMin, yMax: SignalData.yMax
+      });
+      svg += vm.drawXYCurve(continuousSamples, W, H, timeStart, timeEnd, SignalData.yMin, SignalData.yMax, '#287c9f', 1.7, 0.58);
 
-      SignalData.sampled_x_indices.forEach((idx, i) => {
-        const x = getX(idx);
-        const y = getY(SignalData.sampled_x_values[i]);
-        svg += `<circle cx="${x}" cy="${y}" r="4.5" fill="#0c6b4f" stroke="#ffffff" stroke-width="1.5" />`;
+      visibleIndices.forEach((idx, i) => {
+        const x = sxTime(idx);
+        const y = syValue(visibleValues[i]);
+        svg += `<line x1="${x}" y1="${yZero}" x2="${x}" y2="${y}" stroke="#0c6b4f" stroke-width="2.2" />
+          <circle cx="${x}" cy="${y}" r="3.6" fill="#0c6b4f" stroke="#ffffff" stroke-width="1.2" />`;
       });
 
-      if (SignalData.sampled_x_indices.length > 2) {
-        const x1 = getX(SignalData.sampled_x_indices[1]);
-        const x2 = getX(SignalData.sampled_x_indices[2]);
+      if (visibleIndices.length > 2) {
+        const x1 = sxTime(visibleIndices[1]);
+        const x2 = sxTime(visibleIndices[2]);
         const y = H - 42;
         svg += `<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="#e74c3c" stroke-width="2" />
           <path d="M ${x1 + 7} ${y - 5} L ${x1} ${y} L ${x1 + 7} ${y + 5}" fill="none" stroke="#e74c3c" stroke-width="2" stroke-linejoin="round" />
-          <path d="M ${x2 - 7} ${y - 5} L ${x2} ${y} L ${x2 - 7} ${y + 5}" fill="none" stroke="#e74c3c" stroke-width="2" stroke-linejoin="round" />`;
+          <path d="M ${x2 - 7} ${y - 5} L ${x2} ${y} L ${x2 - 7} ${y + 5}" fill="none" stroke="#e74c3c" stroke-width="2" stroke-linejoin="round" />
+          <text class="plot-note" x="${(x1 + x2) / 2}" y="${y - 7}" text-anchor="middle">Δt</text>`;
       }
 
       svg += `</svg>`;
 
       const specH = 260;
-      const fMax = Math.max(fd * 1.15, dfg * 4);
-      const spectrumPeak = Math.max(...vm.makeSamples(-dfg, dfg, 90, (f) => vm.spectrumValue(f, params)).map(([, y]) => y), 0.0001);
-      const spectralLobe = (center, color, alphaValue) => {
-        const samples = vm.makeSamples(center - dfg, center + dfg, 120, (f) => vm.spectrumValue(f - center, params));
+      const fMax = Math.max(fd + dfg * 1.15, dfg * 4);
+      const spectralLines = (center, color, opacity) => {
         const base = specH - 24;
         const sx = (f) => ((f + fMax) / (2 * fMax)) * W;
-        const sy = (value) => specH - ((value - 0) / (spectrumPeak * 1.12)) * specH;
-        const path = samples.map(([f, value], index) => `${index === 0 ? "M" : "L"} ${sx(f)} ${sy(value)}`).join(" ");
-        return `<path d="${path} L ${sx(center + dfg)} ${base} L ${sx(center - dfg)} ${base} Z" fill="${color}" fill-opacity="${alphaValue}" stroke="${color}" stroke-width="2" stroke-opacity="${Math.min(1, alphaValue + 0.25)}" />`;
+        return [-1, -0.5, 0, 0.5, 1].map((offset) => {
+          const amplitude = offset === 0 ? 1 : Math.abs(offset) === 0.5 ? 0.56 : 0.18;
+          const x = sx(center + offset * dfg);
+          const y = base - amplitude * (specH - 66);
+          return `<line x1="${x}" y1="${base}" x2="${x}" y2="${y}" stroke="${color}" stroke-width="${offset === 0 ? 3 : 1.8}" stroke-opacity="${opacity}" />`;
+        }).join("");
       };
-      let specSvg = `<svg viewBox="0 0 ${W} ${specH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
-      specSvg += vm.axes(W, specH, specH - 24, "f", "X_d(f)");
+      let specSvg = `<svg viewBox="0 0 ${W} ${specH}" width="100%" height="auto" class="stage-panel__visuals-svg spectrum-plot spectrum-plot--schematic">`;
+      specSvg += vm.axes(W, specH, specH - 24, "f, кГц", "Xд(f), норм.", {
+        xMin: -fMax, xMax: fMax, yMin: 0, yMax: 1, note: "схематически, нормировано"
+      });
       [-fd, 0, fd].forEach((center) => {
-        specSvg += spectralLobe(center, center === 0 ? "#0c6b4f" : "#287c9f", center === 0 ? 0.36 : 0.16);
+        specSvg += spectralLines(center, center === 0 ? "#0c6b4f" : "#287c9f", center === 0 ? 1 : 0.62);
       });
       const sx = (f) => ((f + fMax) / (2 * fMax)) * W;
       [-fd / 2, fd / 2, -dfg, dfg].forEach((f) => {
         const isNyquist = Math.abs(f) === fd / 2;
         specSvg += `<line x1="${sx(f)}" y1="20" x2="${sx(f)}" y2="${specH - 24}" stroke="${isNyquist ? "#e74c3c" : "#62716b"}" stroke-width="${isNyquist ? 1.8 : 1.2}" stroke-dasharray="${isNyquist ? "6,6" : "4,8"}" />`;
       });
+      specSvg += `<text class="plot-note" x="${sx(0)}" y="42" text-anchor="middle">центральная копия</text>
+        <text class="plot-note" x="${sx(-fd)}" y="58" text-anchor="middle">−fд</text>
+        <text class="plot-note" x="${sx(fd)}" y="58" text-anchor="middle">+fд</text>
+        <line x1="${sx(-dfg)}" y1="30" x2="${sx(dfg)}" y2="30" stroke="#e74c3c" stroke-width="1.5" />
+        <text class="plot-note" x="${sx(0)}" y="23" text-anchor="middle">Δfg</text>`;
       specSvg += `</svg>`;
 
-      const scaleNote = `<dl class="visual-scale"><div><dt>Частота</dt><dd>fд=${fd.toFixed(2)} кГц</dd></div><div><dt>Интервал</dt><dd>Δt=${dt.toFixed(4)} мс</dd></div><div><dt>Запас</dt><dd>fд/(2Δfg)=${alpha.toFixed(2)}</dd></div><div><dt>Решётка</dt><dd>δ_T(t) — моменты отсчётов</dd></div></dl>`;
+      const timeScale = `<dl class="visual-scale"><div><dt>Частота</dt><dd>fд=${fd.toFixed(2)} кГц</dd></div><div><dt>Интервал</dt><dd>Δt=${dt.toFixed(4)} мс</dd></div><div><dt>Решётка</dt><dd>δT(t) — моменты отсчётов</dd></div></dl>`;
+      const spectrumScale = `<dl class="visual-scale"><div><dt>Спектр</dt><dd>Xд(f), нормировано</dd></div><div><dt>Полоса копии</dt><dd>Δfg=${dfg.toFixed(2)} кГц</dd></div><div><dt>Период копий</dt><dd>fд=${fd.toFixed(2)} кГц, fд≥2Δfg</dd></div></dl>`;
       return `<div class="stage-panel__visuals-stack">
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Отсчёты x(kΔt) через интервал Δt</p>${scaleNote}${svg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Спектральные копии после дискретизации</p>${scaleNote}${specSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Отсчёты x(kΔt) на непрерывной кривой x(t)</p>${timeScale}${svg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Схематический спектр Xд(f) после дискретизации</p>${spectrumScale}${specSvg}</div>
       </div>`;
     },
 

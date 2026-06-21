@@ -359,7 +359,7 @@
 
     renderSVG: function(id, params, helpers, SignalData) {
       const { W, getX } = helpers;
-      const zoom = window.RadioMath.getZoomInfo(SignalData, 5);
+      const zoom = window.RadioMath.getZoomInfo(SignalData, 10);
       const bitStepX = W / Math.max(1, zoom.length);
       const xOfIndex = (index) => ((index - zoom.startIdx) / Math.max(1, zoom.endIdx - zoom.startIdx)) * W;
 
@@ -375,7 +375,6 @@
       let maxZ = SignalData.zMax || Math.max(...SignalData.z_t.map(Math.abs), 1.5 * SignalData.Um);
       if (maxZ === 0) maxZ = 1;
       const yOf = (value) => topY0 - (value / maxZ) * (topH * 0.4);
-      let u0_y = topY0 - (u0_val / maxZ) * (topH * 0.4);
       let zD = `M 0 ${topY0}`;
       for (let i = zoom.startIdx; i <= zoom.endIdx; i++) {
         let y = yOf(SignalData.z_t[i]);
@@ -383,7 +382,6 @@
         zD += ` L ${xOfIndex(i)} ${y}`;
       }
       topSVG += `<path d="${zD}" stroke="#287c9f" stroke-width="2" fill="none" stroke-opacity="0.8" stroke-linejoin="round" />`;
-      topSVG += `<line x1="0" y1="${u0_y}" x2="${W}" y2="${u0_y}" stroke="#e74c3c" stroke-width="2" stroke-dasharray="4,4" />`;
       for (let i = 0; i <= zoom.length; i++) {
         const x = i * bitStepX;
         topSVG += `<line x1="${x}" y1="0" x2="${x}" y2="${topH}" stroke="rgba(98,113,107,0.18)" stroke-dasharray="3,8" />`;
@@ -421,7 +419,7 @@
       botSVG += `<line x1="${W}" y1="0" x2="${W}" y2="${botH}" stroke="rgba(98,113,107,0.18)" stroke-dasharray="3,8" />`;
       botSVG += `<path d="${mD}" stroke="#0c6b4f" stroke-width="2.5" fill="none" stroke-linejoin="round" />`;
       botSVG += `</svg>`;
-      const scaleNote = `<dl class="visual-scale"><div><dt>Окно решения</dt><dd>биты ${zoom.start + 1}-${zoom.end}</dd></div><div><dt>Порог</dt><dd>U0=${u0_val.toFixed(4)} В</dd></div><div><dt>Масштаб</dt><dd>ось Y как в канале: ±${maxZ.toFixed(4)} В</dd></div></dl>`;
+      const scaleNote = `<dl class="visual-scale"><div><dt>Окно решения</dt><dd>биты ${zoom.start + 1}-${zoom.end}</dd></div><div><dt>Стробы</dt><dd>в середине каждого символа</dd></div><div><dt>Сигнал</dt><dd>z(t), масштаб ±${maxZ.toFixed(4)} В</dd></div></dl>`;
 
       // --- Отклики детектора U_k ---
       const decisionH = 230;
@@ -460,7 +458,7 @@
         });
         intSvg += `</svg>`;
         const intScale = `<dl class="visual-scale"><div><dt>Шаг 1</dt><dd>когерентное детектирование</dd></div><div><dt>d_k</dt><dd>∝ cos(φ_k)</dd></div><div><dt>Шаг 2</dt><dd>U_k = d_k · d_{k-1}</dd></div></dl>`;
-        intermediateLayer = `<div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Шаг 1: когерентные отклики d_k (до сравнения полярностей)</p>${intScale}${intSvg}</div>`;
+        intermediateLayer = `<div><p class="stage-panel__visuals-header">Отклики d_k перед сравнением полярностей</p>${intScale}${intSvg}</div>`;
       }
 
       // --- Промежуточный график для ДЧМ: отклики двух каналов ---
@@ -486,7 +484,7 @@
         intSvg += `</svg>`;
         const detTypeName = params.reception === "KO" ? "когерентные отклики" : "огибающие";
         const intScale = `<dl class="visual-scale"><div><dt>Синий</dt><dd>U₁ (ППФ₂, f₂)</dd></div><div><dt>Зелёный</dt><dd>U₂ (ППФ₁, f₁)</dd></div><div><dt>Тип</dt><dd>${detTypeName}</dd></div></dl>`;
-        intermediateLayer = `<div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Отклики двух каналов детектора (до вычитающего устройства)</p>${intScale}${intSvg}</div>`;
+        intermediateLayer = `<div><p class="stage-panel__visuals-header">Отклики двух частотных каналов U1 и U2</p>${intScale}${intSvg}</div>`;
       }
 
       // --- ФПВ ---
@@ -537,18 +535,33 @@
       });
       planeSvg += `</svg>`;
 
-      const decisionScale = `<dl class="visual-scale"><div><dt>Отклик</dt><dd>U_k после детектора</dd></div><div><dt>Правило</dt><dd>1, если U_k ≥ U0</dd></div><div><dt>Ошибки</dt><dd>${SignalData.errors.length} битов в текущем прогоне</dd></div></dl>`;
+      const responseMargin = params.modulation === "DCHM" && SignalData.detector_channel1.length
+        ? Math.min(...SignalData.detector_channel1.slice(zoom.start, zoom.end).map((value, index) => Math.abs((SignalData.detector_channel2[zoom.start + index] || 0) - value)))
+        : Math.min(...traces.map((trace) => Math.abs(trace.val - u0_val)));
+      const decisionRule = params.modulation === "DAM"
+        ? "b̂=1, если Uk>U0"
+        : params.modulation === "DCHM"
+          ? "b̂=1, если U2>U1"
+          : params.reception === "SP"
+            ? "b̂=1, если dk·d(k−1)>0"
+            : "b̂=1 при совпадении соседних фаз";
+      const errorsInWindow = traces.filter((trace) => trace.error).length;
+      const decisionScale = `<dl class="visual-scale"><div><dt>Правило</dt><dd>${decisionRule}</dd></div><div><dt>${errorsInWindow ? "Ошибки" : "Запас"}</dt><dd>${errorsInWindow ? `${errorsInWindow} в выбранном окне` : `min=${Number.isFinite(responseMargin) ? responseMargin.toFixed(4) : "0.0000"}`}</dd></div><div><dt>Решение</dt><dd>красным отмечается только ошибочный символ</dd></div></dl>`;
       const pdfScale = `<dl class="visual-scale"><div><dt>W0</dt><dd>отклик при передаче 0</dd></div><div><dt>W1</dt><dd>отклик при передаче 1</dd></div><div><dt>Порог</dt><dd>U0=${u0_val.toFixed(4)} В</dd></div></dl>`;
       const planeScaleNote = `<dl class="visual-scale"><div><dt>Точки</dt><dd>стробы текущего окна</dd></div><div><dt>Вертикаль</dt><dd>граница решения</dd></div><div><dt>Цвет</dt><dd>области 0 и 1</dd></div></dl>`;
+      const pdfDetails = `<details class="visual-step"><summary class="visual-step__summary"><span>Статистика</span><strong>Показать условные ФПВ W0(U) и W1(U)</strong></summary><div class="visual-step__body">${pdfScale}${pdfSvg}</div></details>`;
+      const planeDetails = `<details class="visual-step"><summary class="visual-step__summary"><span>Плоскость</span><strong>Показать плоскость решений по стробам</strong></summary><div class="visual-step__body">${planeScaleNote}${planeSvg}</div></details>`;
 
       return `<div class="stage-panel__visuals-stack">
         ${schemeLayer}
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header"><strong style="color:#287c9f">Зашумленный сигнал z(t) и стробы</strong></p>${scaleNote}${topSVG}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Отклики детектора U_k и порог решения</p>${decisionScale}${decisionSvg}</div>
-        ${intermediateLayer}
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Условные ФПВ W0(U) и W1(U)</p>${pdfScale}${pdfSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Плоскость решений по стробам</p>${planeScaleNote}${planeSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header"><strong style="color:#0c6b4f">Оценка битов b̂(t)</strong></p>${botSVG}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">z(t) → отклики → стробы → правило решения → b̂_k^μ</p>
+          ${scaleNote}${topSVG}
+          ${intermediateLayer}
+          <p class="stage-panel__visuals-header">Решающий отклик и граница решения</p>${decisionScale}${decisionSvg}
+          <p class="stage-panel__visuals-header">Принятые символы b̂_k^μ</p>${botSVG}
+        </div>
+        <div class="stage-panel__visuals-layer">${pdfDetails}</div>
+        <div class="stage-panel__visuals-layer">${planeDetails}</div>
       </div>`;
     },
 
