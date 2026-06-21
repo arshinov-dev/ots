@@ -176,10 +176,11 @@
         errSvg += `<rect x="${x + 2}" y="${errH - 28 - h}" width="${Math.max(3, bitW - 4)}" height="${h}" fill="${bit === "1" ? "#e74c3c" : "#d5ddd8"}" fill-opacity="${bit === "1" ? 0.78 : 0.65}" />`;
       });
       errSvg += `</svg>`;
-      const errorDetails = `<details class="visual-step"><summary class="visual-step__summary"><span>Дополнительно</span><strong>Вектор битовых ошибок \\(E_i\\)</strong></summary><div class="visual-step__body">${codeScale}${errSvg}</div></details>`;
+      const errorDetails = `<details class="visual-step"><summary class="visual-step__summary"><span>Технически</span><strong>Вектор битовых ошибок \\(E_i\\)</strong></summary><div class="visual-step__body">${errSvg}</div></details>`;
+      const transmissionCaption = `<p class="stage-panel__info-box">Шум передачи возникает не в линии связи, а после декодера: ошибочный бит может дать неправильный восстановленный уровень.</p>`;
 
       return `<div class="stage-panel__visuals-stack">
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">\\(\\hat b_k^\\mu \\to \\hat v_k^j\\): декодирование принятых слов</p>${codeScale}${codeTable}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">\\(\\hat b_k^\\mu \\to \\hat v_k^j\\): декодирование принятых слов</p>${codeScale}${codeTable}${transmissionCaption}</div>
         ${levelsLayer}
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Ступенчатая интерполяция \\(\\hat x(t)\\)</p>${interpScale}${interpSvg}${interpCaption}</div>
         <div class="stage-panel__visuals-layer">${errorDetails}</div>
