@@ -56,10 +56,10 @@
 
   // === Функциональная схема приёмника (одна строка, ≤5 блоков) ===
   function buildReceiverSchemeSVG(params, W) {
-    const H = 140;
+    const H = 160;
     const mod = params.modulation;
     const rx = params.reception;
-    const boxW = 92, boxH = 40, gap = 18;
+    const boxW = 100, boxH = 48, gap = 20;
     const yMid = H / 2;
     let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="auto" class="stage-panel__visuals-svg receiver-scheme">`;
 
@@ -175,27 +175,27 @@
     if (mod === "DAM") {
       return `<div class="stage-panel__info-box decision-rule-box">
         <strong>Правило РУ (ДАМ):</strong>
-        <span>один отклик \\(U_k\\) сравнивается с порогом \\(U_0=${u0_val.toFixed(4)}\\) В:</span>
+        <span>РУ сравнивает \\(U_k\\) с порогом \\(U_0=${u0_val.toFixed(4)}\\) В. Если \\(U_k > U_0\\), принимается 1, иначе 0.</span>
         <span class="decision-rule-formula">\\( \\hat b_k = \\begin{cases} 1, & U_k > U_0 \\\\ 0, & U_k \\le U_0 \\end{cases} \\)</span>
       </div>`;
     }
     if (mod === "DCHM") {
       return `<div class="stage-panel__info-box decision-rule-box">
         <strong>Правило РУ (ДЧМ):</strong>
-        <span>два отклика \\(U_{1,k}\\) и \\(U_{2,k}\\) подаются на вычитатель:</span>
+        <span>РУ сравнивает два отклика \\(U_{1,k}\\) и \\(U_{2,k}\\). Принимается тот символ, чей канал дал больший отклик.</span>
         <span class="decision-rule-formula">\\( \\hat b_k = \\begin{cases} 1, & U_{2,k} > U_{1,k} \\\\ 0, & U_{2,k} \\le U_{1,k} \\end{cases} \\)</span>
       </div>`;
     }
     if (rx === "SF") {
       return `<div class="stage-panel__info-box decision-rule-box">
         <strong>Правило РУ (ДОФМ-СФ):</strong>
-        <span>фазовый детектор сравнивает текущую и предыдущую посылки:</span>
+        <span>Решение получается через сравнение фазы текущей и предыдущей посылки:</span>
         <span class="decision-rule-formula">\\( U_k = z_k \\cdot z_{k-1}, \\quad \\hat b_k = \\operatorname{sign}(U_k) \\)</span>
       </div>`;
     }
     return `<div class="stage-panel__info-box decision-rule-box">
       <strong>Правило РУ (ДОФМ-СП):</strong>
-      <span>цепочка принятия решения по полярностям:</span>
+      <span>Решение получается через сравнение полярностей текущей и предыдущей посылки:</span>
       <div class="decision-rule-chain">${node("\\(d_k\\)")}${arrow}${node("\\(d_k \\cdot d_{k-1}\\)")}${arrow}${node("\\(\\operatorname{sign}\\)")}${arrow}${node("\\(\\hat b_k\\)")}</div>
     </div>`;
   }
@@ -465,7 +465,7 @@
 
       return `<div class="stage-panel__visuals-stack">
         ${schemeLayer}
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">\\(z(t)\\) → отклик → строб → сравнение → \\(\\hat b_k^\\mu\\)</p>${decisionRuleBlock}${decisionScale}${decisionSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">\\(z(t)\\) → отклик → строб → сравнение → \\(\\hat b_k^\\mu\\)</p>${decisionRuleBlock}${decisionScale}${decisionSvg}<p class="stage-panel__info-box">Приёмник не угадывает бит: решение получается из отсчёта отклика в момент стробирования.</p></div>
         <div class="stage-panel__visuals-layer">${pdfDetails}</div>
         <div class="stage-panel__visuals-layer">${planeDetails}</div>
       </div>`;

@@ -98,6 +98,9 @@
       });
       const wordStart = wordWindow.start;
       const wordEnd = wordWindow.end;
+      const visibleWords = Math.max(1, wordEnd - wordStart);
+
+      // --- Блок 1: Таблица кодовых слов ---
       const codeRows = SignalData.received_code_words.slice(wordStart, wordEnd).map((word, offset) => {
         const index = wordStart + offset;
         const original = SignalData.original_code_words[index] || "0".repeat(mu);
@@ -107,72 +110,78 @@
         return `<tr class="${changed ? "is-error-row" : ""}"><td>${index + 1}</td><td>${original}</td><td>${word}</td><td>${expectedLevel.toFixed(3)}</td><td>${decodedLevel.toFixed(3)}</td><td>${(decodedLevel - expectedLevel).toFixed(3)}</td></tr>`;
       }).join("");
       const codeTable = `<div class="quant-table-wrap"><table class="quant-table code-table"><thead><tr><th>k</th><th>\\(b_k^\\mu\\)</th><th>\\(\\hat b_k^\\mu\\)</th><th>\\(v_k^j\\), В</th><th>\\(\\hat v_k^j\\), В</th><th>ошибка, В</th></tr></thead><tbody>${codeRows}</tbody></table></div>`;
+      const codeScale = `<dl class="visual-scale"><div><dt>Цепочка</dt><dd>\\(\\hat b_k^\\mu \\to \\hat v_k^j \\to \\hat x(t)\\)</dd></div><div><dt>Разрядность</dt><dd>\\(\\mu=${mu}\\)</dd></div><div><dt>Слова</dt><dd>${wordStart + 1}–${wordEnd}</dd></div></dl>`;
 
+      // --- Блок 2: График уровней ---
+      const errorsInWindow = SignalData.received_code_words.slice(wordStart, wordEnd)
+        .filter((word, offset) => word !== SignalData.original_code_words[wordStart + offset]).length;
+      const noErrorMessage = `<div class="stage-panel__info-box stage-panel__info-box--ok">В выбранном фрагменте ошибок уровня нет; шум передачи \\(\\xi_{\\text{п}}^2\\) рассчитан статистически по \\(p_{\\text{ош}}\\).</div>`;
+
+      const levelH = 200;
+      const levelStepX = W / visibleWords;
+      let levelSvg = `<svg viewBox="0 0 ${W} ${levelH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
+      levelSvg += vm.axes(W, levelH, getLocalY(0, levelH), "k", "v, В", {
+        xMin: wordStart + 1, xMax: wordEnd, yMin: SignalData.yMin, yMax: SignalData.yMax
+      });
+      for (let offset = 0; offset < visibleWords; offset++) {
+        const i = wordStart + offset;
+        const x = (offset + 0.5) * levelStepX;
+        const yOrig = getLocalY(SignalData.quantized_v[i] ?? 0, levelH);
+        const yRec = getLocalY(SignalData.v_hat[i] ?? 0, levelH);
+        const hasError = SignalData.v_hat[i] !== SignalData.quantized_v[i];
+        if (hasError) {
+          levelSvg += `<line x1="${x}" y1="${yOrig}" x2="${x}" y2="${yRec}" stroke="#e74c3c" stroke-width="2.4" />`;
+        }
+        levelSvg += `<circle cx="${x}" cy="${yOrig}" r="4.5" fill="#287c9f" stroke="#fff" stroke-width="1.2" />`;
+        levelSvg += `<circle cx="${x}" cy="${yRec}" r="4.5" fill="${hasError ? "#e74c3c" : "#0c6b4f"}" stroke="#fff" stroke-width="1.2" />`;
+      }
+      levelSvg += `</svg>`;
+      const levelScale = `<dl class="visual-scale"><div><dt>Синие</dt><dd>\\(v_k^j\\)</dd></div><div><dt>Зелёные/красные</dt><dd>\\(\\hat v_k^j\\)</dd></div><div><dt>Ошибки</dt><dd>${errorsInWindow} в окне</dd></div></dl>`;
+      const transmissionNote = `<div class="stage-panel__info-box">Шум передачи возникает после декодера, когда из-за ошибки битов восстанавливается неправильный уровень.</div>`;
+      const levelsLayer = errorsInWindow === 0
+        ? `<div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Уровни \\(v_k^j\\) и \\(\\hat v_k^j\\)</p>${noErrorMessage}</div>`
+        : `<div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Уровни \\(v_k^j\\) и \\(\\hat v_k^j\\): ошибка бита превращается в ошибку уровня</p>${levelScale}${levelSvg}${transmissionNote}</div>`;
+
+      // --- Блок 3: Ступенчатая интерполяция x̂(t) ---
+      const interpH = 180;
+      const wordWidth = W / visibleWords;
+      let interpSvg = `<svg viewBox="0 0 ${W} ${interpH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
+      interpSvg += vm.axes(W, interpH, getLocalY(0, interpH), "kΔt", "x̂(t), В", {
+        xMin: wordStart + 1, xMax: wordEnd, yMin: SignalData.yMin, yMax: SignalData.yMax
+      });
+      let stepD = "";
+      for (let offset = 0; offset < visibleWords; offset++) {
+        const i = wordStart + offset;
+        const x1 = offset * wordWidth;
+        const x2 = (offset + 1) * wordWidth;
+        const y = getLocalY(SignalData.v_hat[i] ?? 0, interpH);
+        if (!stepD) stepD = `M ${x1} ${y}`;
+        else stepD += ` L ${x1} ${y}`;
+        stepD += ` L ${x2} ${y}`;
+      }
+      interpSvg += `<path d="${stepD}" stroke="#0c6b4f" stroke-width="3" fill="none" stroke-linejoin="round" />`;
+      interpSvg += `</svg>`;
+      const interpCaption = `<p class="stage-panel__info-box">Ступени появляются после декодирования и интерполяции ЦАП.</p>`;
+      const interpScale = `<dl class="visual-scale"><div><dt>Сигнал</dt><dd>\\(\\hat x(t)\\)</dd></div><div><dt>Уровней</dt><dd>${visibleWords}</dd></div><div><dt>Окно</dt><dd>${wordStart + 1}–${wordEnd}</dd></div></dl>`;
+
+      // --- Вектор битовых ошибок (свёрнут) ---
       const errH = 130;
       const bits = SignalData.error_code_words.slice(wordStart, wordEnd).join("");
       const bitW = W / Math.max(1, bits.length);
       let errSvg = `<svg viewBox="0 0 ${W} ${errH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
-      errSvg += window.VisualMath.axes(W, errH, errH - 28, "i", "E_i");
+      errSvg += vm.axes(W, errH, errH - 28, "i", "E_i");
       [...bits].forEach((bit, index) => {
         const x = index * bitW;
         const h = bit === "1" ? errH - 54 : 10;
         errSvg += `<rect x="${x + 2}" y="${errH - 28 - h}" width="${Math.max(3, bitW - 4)}" height="${h}" fill="${bit === "1" ? "#e74c3c" : "#d5ddd8"}" fill-opacity="${bit === "1" ? 0.78 : 0.65}" />`;
       });
       errSvg += `</svg>`;
+      const errorDetails = `<details class="visual-step"><summary class="visual-step__summary"><span>Дополнительно</span><strong>Вектор битовых ошибок \\(E_i\\)</strong></summary><div class="visual-step__body">${codeScale}${errSvg}</div></details>`;
 
-      let decH = 200, decY0 = getLocalY(0, decH);
-      let decSVG = `<svg viewBox="0 0 ${W} ${decH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
-      decSVG += vm.axes(W, decH, decY0, "kΔt", "x̂(t), В", {
-        xMin: wordStart + 1,
-        xMax: wordEnd,
-        yMin: SignalData.yMin,
-        yMax: SignalData.yMax
-      });
-
-      let originalStepD = "";
-      let recoveredStepD = "";
-      let errorMarks = "";
-      const visibleWords = Math.max(1, wordEnd - wordStart);
-      const wordWidth = W / visibleWords;
-      for (let offset = 0; offset < visibleWords; offset++) {
-        const i = wordStart + offset;
-        const x1 = offset * wordWidth;
-        const x2 = (offset + 1) * wordWidth;
-        const yOriginal = getLocalY(SignalData.quantized_v[i] ?? SignalData.v_hat[i] ?? 0, decH);
-        const yRecovered = getLocalY(SignalData.v_hat[i] ?? 0, decH);
-        if (offset === 0) {
-          originalStepD = `M ${x1} ${yOriginal}`;
-          recoveredStepD = `M ${x1} ${yRecovered}`;
-        } else {
-          originalStepD += ` L ${x1} ${yOriginal}`;
-          recoveredStepD += ` L ${x1} ${yRecovered}`;
-        }
-        originalStepD += ` L ${x2} ${yOriginal}`;
-        recoveredStepD += ` L ${x2} ${yRecovered}`;
-        if (SignalData.v_hat[i] !== SignalData.quantized_v[i]) {
-          const errorX = (x1 + x2) / 2;
-          errorMarks += `<line x1="${errorX}" y1="${yOriginal}" x2="${errorX}" y2="${yRecovered}" stroke="#e74c3c" stroke-width="2.4" />
-            <circle cx="${errorX}" cy="${yOriginal}" r="3.2" fill="#287c9f" />
-            <circle cx="${errorX}" cy="${yRecovered}" r="3.2" fill="#0c6b4f" />`;
-        }
-      }
-      decSVG += `<path d="${originalStepD}" stroke="#287c9f" stroke-width="2.2" fill="none" stroke-opacity="0.24" stroke-linejoin="round" />`;
-      decSVG += `<path d="${recoveredStepD}" stroke="#0c6b4f" stroke-width="3" fill="none" stroke-linejoin="round" />`;
-      decSVG += errorMarks;
-      decSVG += `</svg>`;
-      const errorsInWindow = SignalData.received_code_words.slice(wordStart, wordEnd)
-        .filter((word, offset) => word !== SignalData.original_code_words[wordStart + offset]).length;
-      const scaleNote = `<dl class="visual-scale"><div><dt>Фрагмент</dt><dd>${visibleWords} уровней</dd></div><div><dt>Передано / восстановлено</dt><dd>синий / зелёный</dd></div><div><dt>Ошибки</dt><dd>${errorsInWindow} в окне</dd></div></dl>`;
-      const codeScale = `<dl class="visual-scale"><div><dt>Цепочка</dt><dd>\\(\\hat b_k^\\mu \\to \\hat v_k^j \\to \\hat x(t)\\)</dd></div><div><dt>Разрядность</dt><dd>\\(\\mu=${mu}\\)</dd></div><div><dt>Слова</dt><dd>${wordStart + 1}–${wordEnd}</dd></div></dl>`;
-      const noErrorMessage = `<div class="stage-panel__info-box stage-panel__info-box--ok">В выбранном фрагменте ошибок уровня нет; шум передачи рассчитан статистически через \\(p_{\\text{ош}}\\).</div>`;
-      const transmissionNote = `<div class="stage-panel__info-box"><strong>Шум передачи — это не \\(n(t)\\) из канала.</strong> Он возникает после декодера, когда из-за ошибки битов восстанавливается неправильный уровень. Итоговая формула по методичке: \\( \\xi_{\\text{п}}^2 = \\left(\\frac{2}{\\pi}\\operatorname{Si}(\\pi)-1\\right)\\Delta U^2 \\overline{p}_{\\text{ош}} \\sum_i p_i \\sum_j (j-i)^2 \\).</div>`;
-      const errorDetails = `<details class="visual-step"><summary class="visual-step__summary"><span>Ошибки</span><strong>Дополнительно: вектор битовых ошибок \\(E_i\\)</strong></summary><div class="visual-step__body">${codeScale}${errSvg}</div></details>`;
-      const levelsLayer = errorsInWindow === 0
-        ? `<div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">\\(\\hat v_k^j \\to \\hat x(t)\\): ступенчатая интерполяция ЦАП</p>${noErrorMessage}</div>`
-        : `<div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">\\(\\hat v_k^j \\to \\hat x(t)\\): ошибка бита превращается в ошибку уровня</p>${scaleNote}${decSVG}${transmissionNote}</div>`;
       return `<div class="stage-panel__visuals-stack">
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">\\(\\hat b_k^\\mu \\to \\hat v_k^j\\): декодирование принятых слов</p>${codeScale}${codeTable}</div>
         ${levelsLayer}
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Ступенчатая интерполяция \\(\\hat x(t)\\)</p>${interpScale}${interpSvg}${interpCaption}</div>
         <div class="stage-panel__visuals-layer">${errorDetails}</div>
       </div>`;
     },

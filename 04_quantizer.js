@@ -203,7 +203,7 @@
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Отсчёт \\(x(k\\Delta t)\\) → квантованный уровень \\(v_k^j\\)</p>${scaleNote}${timeSvg}</div>
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Амплитудная характеристика квантователя</p>${scaleNote}${stairSvg}</div>
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Вероятности \\(p_j\\) и интегральное распределение \\(F_j\\)</p>${histScale}${histSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Распределение ошибки квантования \\(\\xi_\\text{к}=v_j-x_k\\)</p>${scaleNote}${errSvg}</div>
+        <div class="stage-panel__visuals-layer"><details class="visual-step"><summary class="visual-step__summary"><span>Дополнительно</span><strong>Распределение ошибки квантования \\(\\xi_k\\)</strong></summary><div class="visual-step__body"><p class="stage-panel__info-box">Ошибка квантования определяется разностью \\(\\xi_k = v_k^j - x_k\\) и входит в \\(\\xi_{\\text{кв}}^2\\).</p>${scaleNote}${errSvg}</div></details></div>
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Полная таблица интервалов, уровней и вероятностей</p>${table}</div>
       </div>`;
     },

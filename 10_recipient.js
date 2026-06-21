@@ -133,7 +133,7 @@
       overlaySvg += `</svg>`;
 
       // --- Компактная форма АЧХ идеального ФНЧ ---
-      const filterNote = `<div class="stage-panel__info-box">\\( |K(f)|=1 \\) при \\( |f|\\\le\\\Delta f_g \\), иначе \\(0\\); \\(\\\Delta f_g=${dfg.toFixed(2)}\\) кГц.</div>`;
+      const filterNote = `<div class="stage-panel__info-box">\\( |K(f)|=1 \\) при \\( |f|\\le\\Delta f_g \\), иначе \\(0\\); \\(\\Delta f_g=${dfg.toFixed(2)}\\) кГц.</div>`;
 
       // --- Составляющие ошибки ---
       const components = SignalData.delta_sum_components || {};
