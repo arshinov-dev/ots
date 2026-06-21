@@ -99,11 +99,11 @@
         <text class="plot-note" x="${sx(0)}" y="23" text-anchor="middle">Δfg</text>`;
       specSvg += `</svg>`;
 
-      const timeScale = `<dl class="visual-scale"><div><dt>Частота</dt><dd>\\(f_д=${fd.toFixed(2)}\\) кГц</dd></div><div><dt>Интервал</dt><dd>\\(\\Delta t=${dt.toFixed(4)}\\) мс</dd></div><div><dt>Решётка</dt><dd>\\(\\delta_T(t)\\) — моменты отсчётов</dd></div></dl>`;
-      const spectrumScale = `<dl class="visual-scale"><div><dt>Спектр</dt><dd>\\(X_д(f)\\), нормировано</dd></div><div><dt>Полоса копии</dt><dd>\\(\\Delta f_g=${dfg.toFixed(2)}\\) кГц</dd></div><div><dt>Период копий</dt><dd>\\(f_д=${fd.toFixed(2)}\\) кГц, \\(f_д\\geq2\\Delta f_g\\)</dd></div></dl>`;
+      const timeScale = `<dl class="visual-scale"><div><dt>Частота</dt><dd>\\(f_{\\text{д}}=${fd.toFixed(2)}\\) кГц</dd></div><div><dt>Интервал</dt><dd>\\(\\Delta t=${dt.toFixed(4)}\\) мс</dd></div><div><dt>Решётка</dt><dd>\\(\\delta_T(t)\\) — моменты отсчётов</dd></div></dl>`;
+      const spectrumScale = `<dl class="visual-scale"><div><dt>Спектр</dt><dd>\\(X_{\\text{д}}(f)\\), нормировано</dd></div><div><dt>Полоса копии</dt><dd>\\(\\Delta f_g=${dfg.toFixed(2)}\\) кГц</dd></div><div><dt>Период копий</dt><dd>\\(f_{\\text{д}}=${fd.toFixed(2)}\\) кГц, \\(f_{\\text{д}}\\geq2\\Delta f_g\\)</dd></div></dl>`;
       return `<div class="stage-panel__visuals-stack">
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Отсчёты \\(x(k\\Delta t)\\) на непрерывной кривой \\(x(t)\\)</p>${timeScale}${svg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Схематический спектр \\(X_д(f)\\) после дискретизации</p>${spectrumScale}${specSvg}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">Схематический спектр \\(X_{\\text{д}}(f)\\) после дискретизации</p>${spectrumScale}${specSvg}</div>
       </div>`;
     },
 
@@ -113,10 +113,10 @@
       const fd = 2 * alpha * dfg;
       const dt = 1 / fd;
       let theory = `Дискретизатор умножает ограниченный по спектру сигнал на периодическую решётку импульсов и оставляет последовательность отсчётов. Чем больше \\(\\alpha\\), тем дальше спектральные копии друг от друга.`;
-      let formulas = `<div class="formula-preview"><span>Теорема Котельникова</span>\\[ f_д \\ge 2\\Delta f_g, \\quad f_д = 2\\alpha\\Delta f_g \\]</div>`;
-      formulas += `<div class="formula-preview"><span>Частота дискретизации</span>\\[ f_д = 2 \\cdot ${toLatexNumber(alpha)} \\cdot ${toLatexNumber(dfg)} = ${toLatexNumber(fd.toFixed(2))} \\text{ кГц} \\]</div>`;
-      formulas += `<div class="formula-preview"><span>Интервал дискретизации</span>\\[ \\Delta t = \\frac{1}{f_д} \\approx ${toLatexNumber(dt.toFixed(4))} \\text{ мс} \\]</div>`;
-      formulas += `<div class="formula-preview"><span>Модель дискретизации</span>\\[ x_d(t)=x(t)\\sum_{k=-\\infty}^{\\infty}\\delta(t-k\\Delta t), \\quad X_d(f)=f_д\\sum_{m=-\\infty}^{\\infty}X(f-mf_д) \\]</div>`;
+      let formulas = `<div class="formula-preview"><span>Теорема Котельникова</span>\\[ f_{\\text{д}} \\ge 2\\Delta f_g, \\quad f_{\\text{д}} = 2\\alpha\\Delta f_g \\]</div>`;
+      formulas += `<div class="formula-preview"><span>Частота дискретизации</span>\\[ f_{\\text{д}} = 2 \\cdot ${toLatexNumber(alpha)} \\cdot ${toLatexNumber(dfg)} = ${toLatexNumber(fd.toFixed(2))} \\text{ кГц} \\]</div>`;
+      formulas += `<div class="formula-preview"><span>Интервал дискретизации</span>\\[ \\Delta t = \\frac{1}{f_{\\text{д}}} \\approx ${toLatexNumber(dt.toFixed(4))} \\text{ мс} \\]</div>`;
+      formulas += `<div class="formula-preview"><span>Модель дискретизации</span>\\[ x_d(t)=x(t)\\sum_{k=-\\infty}^{\\infty}\\delta(t-k\\Delta t), \\quad X_d(f)=f_{\\text{д}}\\sum_{m=-\\infty}^{\\infty}X(f-mf_{\\text{д}}) \\]</div>`;
       return { theory, formulas };
     }
   };

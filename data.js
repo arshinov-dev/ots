@@ -82,8 +82,8 @@
       } else if (params.modulation === "DOFM") {
         const phaseIndex = Math.PI / 2;
         dfSignal = 2 * (phaseIndex + 1) * dfPcm;
-        bandwidthDescription = "ДОФМ: спектр берётся как у фазовой манипуляции с индексом m_ф=π/2.";
-        bandwidthFormulaLatex = "\\Delta f_s=2(m_ф+1)\\Delta f_{ц},\\quad m_ф=\\pi/2";
+        bandwidthDescription = "ДОФМ: спектр берётся как у фазовой манипуляции с индексом m_{\\text{ф}}=π/2.";
+        bandwidthFormulaLatex = "\\Delta f_s=2(m_{\\text{ф}}+1)\\Delta f_{ц},\\quad m_{\\text{ф}}=\\pi/2";
       }
     }
 

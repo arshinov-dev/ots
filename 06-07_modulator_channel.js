@@ -333,9 +333,9 @@
                 <text class="plot-note" x="${sx(f0 + lobeHalfWidth)}" y="${baseY - 8}" text-anchor="middle">f0+Δfц</text>`;
             }
             specSvg += `</svg>`;
-            const spectrumScale = `<dl class="visual-scale"><div><dt>Спектр</dt><dd>\\(S(f)\\), нормировано</dd></div><div><dt>Цифровая полоса</dt><dd>\\(\\Delta f_ц=${window.RadioMath.getDigitalBandwidth(params).toFixed(2)}\\,\\text{кГц}\\)</dd></div><div><dt>Полоса сигнала</dt><dd>\\(\\Delta f_s=${(SignalData.df_s || 0).toFixed(2)}\\,\\text{кГц}\\)</dd></div></dl>`;
+            const spectrumScale = `<dl class="visual-scale"><div><dt>Спектр</dt><dd>\\(S(f)\\), нормировано</dd></div><div><dt>Цифровая полоса</dt><dd>\\(\\Delta f_{\\text{ц}}=${window.RadioMath.getDigitalBandwidth(params).toFixed(2)}\\,\\text{кГц}\\)</dd></div><div><dt>Полоса сигнала</dt><dd>\\(\\Delta f_s=${(SignalData.df_s || 0).toFixed(2)}\\,\\text{кГц}\\)</dd></div></dl>`;
             const spectrumExplanation = params.modulation === "DAM"
-              ? `<p class="stage-panel__graph-purpose">Одна область около \\(f_0\\) и боковые полосы; \\(\\Delta f_s=2\\Delta f_ц\\).</p>`
+              ? `<p class="stage-panel__graph-purpose">Одна область около \\(f_0\\) и боковые полосы; \\(\\Delta f_s=2\\Delta f_{\\text{ц}}\\).</p>`
               : params.modulation === "DCHM"
                 ? `<p class="stage-panel__graph-purpose">Две области около \\(f_1\\) и \\(f_2\\); общая \\(\\Delta f_s\\) включает разнос несущих и боковые полосы.</p>`
                 : `<p class="stage-panel__graph-purpose">Одна область около \\(f_0\\); ширина \\(\\Delta f_s\\) соответствует формуле методички.</p>`;
@@ -352,11 +352,11 @@
               ? `P_{ДАМ}=\\frac{P_c}{2}=${toLatexNumber(power.symbolPower.toFixed(6))},\\quad U_m=\\sqrt{P_{ДАМ}}=${toLatexNumber(power.Um.toFixed(4))}\\text{ В}`
               : `P_{сим}=P_c=${toLatexNumber(power.symbolPower.toFixed(6))},\\quad U_m=\\sqrt{2P_{сим}}=${toLatexNumber(power.Um.toFixed(4))}\\text{ В}`;
             let theory = "Модулятор согласует цифровой поток с аналоговым каналом: переносит биты на гармоническую несущую через амплитуду, частоту или относительную фазу.";
-            let formulas = `<div class="formula-preview"><span>Длительность символа и спектр ИКМ</span>\\[ f_д=2\\alpha\\Delta f_g=${toLatexNumber(power.fd.toFixed(2))}\\text{ кГц},\\quad \\tau_{сим}=\\frac{\\Delta t}{\\mu}=\\frac{1}{${toLatexNumber(power.fd.toFixed(2))}\\cdot ${power.mu}}=${toLatexNumber(power.tauSim.toFixed(6))}\\text{ мс} \\]\\[ \\Delta f_{ц}=\\frac{k_1}{\\tau_{сим}},\\quad k_1=${power.k1},\\quad \\Delta f_{ц}=${toLatexNumber(power.df_pcm.toFixed(2))}\\text{ кГц} \\]</div>`;
+            let formulas = `<div class="formula-preview"><span>Длительность символа и спектр ИКМ</span>\\[ f_{\\text{д}}=2\\alpha\\Delta f_g=${toLatexNumber(power.fd.toFixed(2))}\\text{ кГц},\\quad \\tau_{\\text{сим}}=\\frac{\\Delta t}{\\mu}=\\frac{1}{${toLatexNumber(power.fd.toFixed(2))}\\cdot ${power.mu}}=${toLatexNumber(power.tauSim.toFixed(6))}\\text{ мс} \\]\\[ \\Delta f_{ц}=\\frac{k_1}{\\tau_{\\text{сим}}},\\quad k_1=${power.k1},\\quad \\Delta f_{ц}=${toLatexNumber(power.df_pcm.toFixed(2))}\\text{ кГц} \\]</div>`;
             formulas += `<div class="formula-preview"><span>Полоса выбранной дискретной модуляции</span>\\[ ${power.formulaLatex},\\quad \\Delta f_s=${toLatexNumber(power.df_s.toFixed(2))}\\text{ кГц} \\]</div>`;
             formulas += `<div class="stage-panel__info-box"><strong>По методичке:</strong><br>${power.description}</div>`;
-            formulas += `<div class="formula-preview"><span>Мощность шума в полосе</span>\\[ P_ш = N_0\\Delta f_s = ${toLatexNumber(power.N0)}\\cdot ${toLatexNumber(power.df_s.toFixed(2))} = ${toLatexNumber(power.P_sh.toFixed(6))}\\text{ Вт} \\]</div>`;
-            formulas += `<div class="formula-preview"><span>Требуемая мощность сигнала</span>\\[ P_c = h^2P_ш = ${toLatexNumber(power.h2)}\\cdot ${toLatexNumber(power.P_sh.toFixed(6))} = ${toLatexNumber(power.P_c.toFixed(6))}\\text{ Вт} \\]</div>`;
+            formulas += `<div class="formula-preview"><span>Мощность шума в полосе</span>\\[ P_{\\text{ш}} = N_0\\Delta f_s = ${toLatexNumber(power.N0)}\\cdot ${toLatexNumber(power.df_s.toFixed(2))} = ${toLatexNumber(power.P_sh.toFixed(6))}\\text{ Вт} \\]</div>`;
+            formulas += `<div class="formula-preview"><span>Требуемая мощность сигнала</span>\\[ P_c = h^2P_{\\text{ш}} = ${toLatexNumber(power.h2)}\\cdot ${toLatexNumber(power.P_sh.toFixed(6))} = ${toLatexNumber(power.P_c.toFixed(6))}\\text{ Вт} \\]</div>`;
             formulas += `<div class="formula-preview"><span>Амплитуда сигнала</span>\\[ ${ampFormula} \\]</div>`;
             formulas += `<div class="stage-panel__info-box"><strong>Связь с графиком:</strong><br>${window.RadioMath.getVisualFrequencyNote(params)} Амплитуда по оси Y масштабируется по рассчитанному значению \\(U_m\\).</div>`;
             return { theory, formulas };
@@ -479,8 +479,8 @@
             envelopeSvg += `</svg>`;
 
             const scaleNote = `<dl class="visual-scale"><div><dt>Общий масштаб</dt><dd>±${maxZ.toFixed(4)} В</dd></div><div><dt>Окно</dt><dd>биты ${zoom.start + 1}-${zoom.end}</dd></div><div><dt>\\(\\chi\\)</dt><dd>1 (не задан в варианте)</dd></div></dl>`;
-            const noiseScale = `<dl class="visual-scale"><div><dt>\\(\\sigma_ш\\)</dt><dd>${sigma.toFixed(4)} В</dd></div><div><dt>\\(P_ш\\)</dt><dd>${(SignalData.P_sh || 0).toFixed(6)} Вт</dd></div><div><dt>Модель</dt><dd>\\(n(t)=N_{шc}\\cos\\omega_ш t + N_{шs}\\sin\\omega_ш t\\)</dd></div></dl>`;
-            const powerScale = `<dl class="visual-scale"><div><dt>\\(N_0\\)</dt><dd>${power.N0}</dd></div><div><dt>\\(P_ш\\)</dt><dd>${power.P_sh.toFixed(6)} Вт</dd></div><div><dt>\\(P_s\\)</dt><dd>${power.P_c.toFixed(6)} Вт</dd></div></dl>`;
+            const noiseScale = `<dl class="visual-scale"><div><dt>\\(\\sigma_{\\text{ш}}\\)</dt><dd>${sigma.toFixed(4)} В</dd></div><div><dt>\\(P_{\\text{ш}}\\)</dt><dd>${(SignalData.P_sh || 0).toFixed(6)} Вт</dd></div><div><dt>Модель</dt><dd>\\(n(t)=N_{\\text{ш}c}\\cos\\omega_ш t + N_{\\text{ш}s}\\sin\\omega_ш t\\)</dd></div></dl>`;
+            const powerScale = `<dl class="visual-scale"><div><dt>\\(N_0\\)</dt><dd>${power.N0}</dd></div><div><dt>\\(P_{\\text{ш}}\\)</dt><dd>${power.P_sh.toFixed(6)} Вт</dd></div><div><dt>\\(P_s\\)</dt><dd>${power.P_c.toFixed(6)} Вт</dd></div></dl>`;
             const noiseBandScheme = `<div class="stage-panel__info-box"><svg viewBox="0 0 220 80" width="200" height="72" style="display:block;margin:0 auto;">
               <rect x="45" y="18" width="140" height="40" fill="rgba(231,76,60,0.12)" stroke="#e74c3c" stroke-width="2" />
               <text x="115" y="44" text-anchor="middle" fill="#1f2b26" font-family="monospace" font-size="13">Pш = N₀·Δfs</text>
@@ -506,8 +506,8 @@
             let theory = "На вход приёмника поступает смесь полезного сигнала и аддитивного белого гауссовского шума (АБГШ). Канал вносит случайные флуктуации, искажающие форму сигнала.";
             let formulas = `<div class="formula-preview"><span>Модель принимаемого сигнала</span>\\[ z(t) = \\chi S(t) + n(t) \\]</div>`;
             formulas += `<div class="stage-panel__info-box"><strong>Коэффициент ослабления:</strong><br>В методичке \\(z(t)=\\chi S(t)+n(t)\\), где \\(\\chi<1\\) учитывает затухание в линии. Поскольку в индивидуальных вариантах \\(\\chi\\) не задаётся, в численной модели принято \\(\\chi=1\\) — линия без дополнительного ослабления.</div>`;
-            formulas += `<div class="formula-preview"><span>Узкополосная гауссовская помеха</span>\\[ n(t)=N_{шc}(t)\\cos\\omega_ш t+N_{шs}(t)\\sin\\omega_ш t,\\quad \\sigma_{Nшc}^2=\\sigma_{Nшs}^2=P_ш \\]</div>`;
-            formulas += `<div class="formula-preview"><span>СКО шума</span>\\[ \\sigma_ш = \\sqrt{P_ш} = \\sqrt{${toLatexNumber(power.P_sh.toFixed(6))}} = ${toLatexNumber(power.sigmaNoise.toFixed(4))}\\text{ В} \\]</div>`;
+            formulas += `<div class="formula-preview"><span>Узкополосная гауссовская помеха</span>\\[ n(t)=N_{\\text{ш}c}(t)\\cos\\omega_ш t+N_{\\text{ш}s}(t)\\sin\\omega_ш t,\\quad \\sigma_{Nшc}^2=\\sigma_{Nшs}^2=P_{\\text{ш}} \\]</div>`;
+            formulas += `<div class="formula-preview"><span>СКО шума</span>\\[ \\sigma_{\\text{ш}} = \\sqrt{P_{\\text{ш}}} = \\sqrt{${toLatexNumber(power.P_sh.toFixed(6))}} = ${toLatexNumber(power.sigmaNoise.toFixed(4))}\\text{ В} \\]</div>`;
             formulas += `<div class="formula-preview"><span>Пропускная способность НКС</span>\\[ C=\\Delta f_s\\log_2(1+h^2)=${toLatexNumber(power.df_s.toFixed(2))}\\log_2(1+${toLatexNumber(power.h2)})=${toLatexNumber(power.capacity.toFixed(2))}\\text{ кбит/с} \\]</div>`;
             formulas += `<div class="stage-panel__info-box"><strong>Связь с графиком:</strong><br>Масштабирование осей: чтобы выбросы шума не обрезались, ось Y расширена до \\(Z_{max}=\\max(|z(t)|,1{,}5U_m)=${toLatexNumber(zMax.toFixed(4))}\\) В. Все три графика канала используют этот же масштаб.</div>`;
             return { theory, formulas };

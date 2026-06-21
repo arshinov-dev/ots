@@ -1623,21 +1623,25 @@ details.field summary::-webkit-details-marker {
 
 .signal-flow-row {
   display: flex;
-  align-items: stretch;
+  flex-wrap: wrap;
+  align-items: flex-start;
   gap: 12px;
 }
 
 .signal-flow-cell {
-  flex: 1;
-  display: grid;
-  gap: 4px;
+  flex: 1 1 160px;
+  min-width: min-content;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   padding: 10px 14px;
   background: #f7faf8;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
+  height: auto;
 }
 
-.signal-flow-cell span {
+.signal-flow-label {
   font-size: 0.68rem;
   font-weight: 850;
   letter-spacing: 0.1em;
@@ -1645,17 +1649,26 @@ details.field summary::-webkit-details-marker {
   color: var(--group-color);
 }
 
-.signal-flow-cell strong {
+.signal-flow-formula {
+  display: block;
   font-size: 0.92rem;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   color: #1f2b26;
+  line-height: normal;
+}
+
+.signal-flow-formula .mjx-chtml {
+  display: block;
+  line-height: normal;
+  vertical-align: baseline;
 }
 
 .signal-flow-arrow {
   display: flex;
   align-items: center;
+  align-self: center;
   font-size: 1.4rem;
   color: var(--muted);
+  flex: 0 0 auto;
 }
 
 .signal-flow-change {

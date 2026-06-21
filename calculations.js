@@ -181,7 +181,7 @@
       const phaseIndex = Math.PI / 2;
       modulatedBandwidth = 2 * (phaseIndex + 1) * digitalBandwidth;
       bandwidthFormulaLatex = "\\Delta f_s=2(m_\\phi+1)\\Delta f_{ц},\\quad m_\\phi=\\pi/2";
-      bandwidthDescription = "ДОФМ: спектр берётся как у фазовой манипуляции с индексом m_ф=π/2.";
+      bandwidthDescription = "ДОФМ: спектр берётся как у фазовой манипуляции с индексом m_{\\text{ф}}=π/2.";
       centralFrequencies = [carrierFrequency];
       formulaId = "spectrum-dofm";
     }
@@ -210,37 +210,37 @@
     "DAM-KO": {
       formulaId: "perr-dam-ko",
       label: "ДАМ-КО",
-      latex: "p_{ош}=1-\\Phi\\left(\\frac{h}{\\sqrt{2}}\\right)",
+      latex: "p_{\\text{ош}}=1-\\Phi\\left(\\frac{h}{\\sqrt{2}}\\right)",
       compute: (h, h2) => 1 - normalCdf(h / Math.SQRT2),
     },
     "DAM-NO": {
       formulaId: "perr-dam-no",
       label: "ДАМ-НО",
-      latex: "p_{ош}=0{,}5e^{-h^2/4}",
+      latex: "p_{\\text{ош}}=0{,}5e^{-h^2/4}",
       compute: (h, h2) => 0.5 * Math.exp(-h2 / 4),
     },
     "DCHM-KO": {
       formulaId: "perr-dchm-ko",
       label: "ДЧМ-КО",
-      latex: "p_{ош}=1-\\Phi(h)",
+      latex: "p_{\\text{ош}}=1-\\Phi(h)",
       compute: (h, h2) => 1 - normalCdf(h),
     },
     "DCHM-NO": {
       formulaId: "perr-dchm-no",
       label: "ДЧМ-НО",
-      latex: "p_{ош}=0{,}5e^{-h^2/2}",
+      latex: "p_{\\text{ош}}=0{,}5e^{-h^2/2}",
       compute: (h, h2) => 0.5 * Math.exp(-h2 / 2),
     },
     "DOFM-SF": {
       formulaId: "perr-dofm-sf",
       label: "ДОФМ-СФ",
-      latex: "p_{ош}=0{,}5e^{-h^2}",
+      latex: "p_{\\text{ош}}=0{,}5e^{-h^2}",
       compute: (h, h2) => 0.5 * Math.exp(-h2),
     },
     "DOFM-SP": {
       formulaId: "perr-dofm-sp",
       label: "ДОФМ-СП",
-      latex: "p_{ош}=2p_{ДФМ}(1-p_{ДФМ}),\\quad p_{ДФМ}=1-\\Phi(\\sqrt{2}h)",
+      latex: "p_{\\text{ош}}=2p_{ДФМ}(1-p_{ДФМ}),\\quad p_{ДФМ}=1-\\Phi(\\sqrt{2}h)",
       compute: (h, h2) => {
         const pDfm = 1 - normalCdf(Math.SQRT2 * h);
         return 2 * pDfm * (1 - pDfm);
@@ -319,8 +319,8 @@
       mu,
       sumTransitions,
       formulaId: "transmission-noise-methodical",
-      latex: "\\xi_p^2=\\left(\\frac{2}{\\pi}\\text{Si}(\\pi)-1\\right)\\Delta U^2\\overline{p}_{ош}\\sum_{i=1}^{L+1}p_i\\sum_{j=1}^{L+1}(j-i)^2",
-      latexPAvgError: "\\overline{p}_{ош}=\\frac{1}{L+1}\\left(1-(1-p_{ош})^{\\mu}\\right)",
+      latex: "\\xi_{\\text{п}}^2=\\left(\\frac{2}{\\pi}\\text{Si}(\\pi)-1\\right)\\Delta U^2\\overline{p}_{\\text{ош}}\\sum_{i=1}^{L+1}p_i\\sum_{j=1}^{L+1}(j-i)^2",
+      latexPAvgError: "\\overline{p}_{\\text{ош}}=\\frac{1}{L+1}\\left(1-(1-p_{\\text{ош}})^{\\mu}\\right)",
       inputs: { stepSize: dU, levelCount, pError, mu, pAvgError, sumTransitions },
     };
   }

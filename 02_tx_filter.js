@@ -94,7 +94,7 @@
         <text class="plot-note" x="${x(dfg) + 8}" y="34">fср=Δfg</text>`;
       freqSvg += `</svg>`;
       const timeLegend = `<dl class="visual-scale"><div><dt>До ФНЧ</dt><dd><span class="legend-line legend-line--source"></span>\\(g(t)\\)</dd></div><div><dt>После ФНЧ</dt><dd><span class="legend-line legend-line--filtered"></span>\\(x(t)\\)</dd></div><div><dt>Общее окно</dt><dd>${(timeEnd - timeStart).toFixed(3)} мс</dd></div></dl>`;
-      const spectrumLegend = `<dl class="visual-scale"><div><dt>До ФНЧ</dt><dd><span class="legend-line legend-line--source"></span>\\(G_g(f)\\)</dd></div><div><dt>После ФНЧ</dt><dd><span class="legend-line legend-line--filtered"></span>\\(G_x(f)\\)</dd></div><div><dt>Срез</dt><dd>\\(f_{ср}=\\Delta f_g=${dfg.toFixed(2)}\\) кГц</dd></div></dl>`;
+      const spectrumLegend = `<dl class="visual-scale"><div><dt>До ФНЧ</dt><dd><span class="legend-line legend-line--source"></span>\\(G_g(f)\\)</dd></div><div><dt>После ФНЧ</dt><dd><span class="legend-line legend-line--filtered"></span>\\(G_x(f)\\)</dd></div><div><dt>Срез</dt><dd>\\(f_{\\text{ср}}=\\Delta f_g=${dfg.toFixed(2)}\\) кГц</dd></div></dl>`;
 
       return `<div class="stage-panel__visuals-stack">
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">1. Во времени: \\(g(t)\\) до ФНЧ и \\(x(t)\\) после ФНЧ</p>${timeLegend}${timeSvg}</div>
@@ -109,10 +109,10 @@
       const epsAbs = SignalData.filter_error_analytic_abs || eps * Pg;
       const Px = SignalData.filtered_power_analytic || Math.max(0, Pg - epsAbs);
       let theory = "Передающий ФНЧ оставляет основную полосу сообщения и подавляет высокочастотные составляющие. На временном графике это выглядит как сглаживание, а на спектре — как прямоугольное окно пропускания.";
-      let formulas = `<div class="formula-preview"><span>Частота среза ФНЧ</span>\\[ f_{cp} = \\Delta f_g = ${toLatexNumber(dfg)} \\text{ кГц} \\]</div>`;
-      formulas += `<div class="formula-preview"><span>Мощность после идеального ФНЧ</span>\\[ P_x = 2\\int_{0}^{f_{cp}}G_g(f)df \\approx ${toLatexNumber(Px.toFixed(4))} \\text{ В}^2 \\]</div>`;
-      formulas += `<div class="formula-preview"><span>Аналитическая ошибка фильтрации</span>\\[ \\varepsilon_f^2 = 2\\int_{f_{cp}}^{\\infty}G_g(f)df = P_g-P_x \\approx ${toLatexNumber(epsAbs.toFixed(4))} \\text{ В}^2, \\quad \\frac{\\varepsilon_f^2}{P_g}\\approx ${toLatexNumber(eps.toFixed(4))} \\]</div>`;
-      formulas += `<div class="stage-panel__info-box"><strong>Связь с графиком:</strong><br>Зелёная область на спектре даёт \\(P_x\\), красная область за \\(\\pm f_{cp}\\) даёт \\(\\varepsilon_f^2\\). Временной график строится из тех же спектральных составляющих, поэтому \\(g(t)\\) и \\(x(t)\\) связаны напрямую.</div>`;
+      let formulas = `<div class="formula-preview"><span>Частота среза ФНЧ</span>\\[ f_{\\text{ср}} = \\Delta f_g = ${toLatexNumber(dfg)} \\text{ кГц} \\]</div>`;
+      formulas += `<div class="formula-preview"><span>Мощность после идеального ФНЧ</span>\\[ P_x = 2\\int_{0}^{f_{\\text{ср}}}G_g(f)df \\approx ${toLatexNumber(Px.toFixed(4))} \\text{ В}^2 \\]</div>`;
+      formulas += `<div class="formula-preview"><span>Аналитическая ошибка фильтрации</span>\\[ \\varepsilon_f^2 = 2\\int_{f_{\\text{ср}}}^{\\infty}G_g(f)df = P_g-P_x \\approx ${toLatexNumber(epsAbs.toFixed(4))} \\text{ В}^2, \\quad \\frac{\\varepsilon_f^2}{P_g}\\approx ${toLatexNumber(eps.toFixed(4))} \\]</div>`;
+      formulas += `<div class="stage-panel__info-box"><strong>Связь с графиком:</strong><br>Зелёная область на спектре даёт \\(P_x\\), красная область за \\(\\pm f_{\\text{ср}}\\) даёт \\(\\varepsilon_f^2\\). Временной график строится из тех же спектральных составляющих, поэтому \\(g(t)\\) и \\(x(t)\\) связаны напрямую.</div>`;
       return { theory, formulas };
     }
   };

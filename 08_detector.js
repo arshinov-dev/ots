@@ -3,6 +3,9 @@
   'use strict';
   window.StageHandlers = window.StageHandlers || {};
 
+  const MOD_LABELS = { DAM: "ДАМ", DCHM: "ДЧМ", DOFM: "ДОФМ" };
+  const RX_LABELS = { KO: "КО", NO: "НО", SF: "СФ", SP: "СП" };
+
   function erfApprox(x) {
     const sign = x < 0 ? -1 : 1;
     const absX = Math.abs(x);
@@ -25,28 +28,28 @@
     if (params.modulation === "DAM" && params.reception === "KO") {
       value = 1 - normalCdf(h / Math.SQRT2);
       label = "ДАМ-КО";
-      latex = `p_{ош}=1-\\Phi\\left(\\frac{h}{\\sqrt{2}}\\right)`;
+      latex = `p_{\\text{ош}}=1-\\Phi\\left(\\frac{h}{\\sqrt{2}}\\right)`;
     } else if (params.modulation === "DAM") {
       value = 0.5 * Math.exp(-h2 / 4);
       label = "ДАМ-НО";
-      latex = `p_{ош}=0{,}5e^{-h^2/4}`;
+      latex = `p_{\\text{ош}}=0{,}5e^{-h^2/4}`;
     } else if (params.modulation === "DCHM" && params.reception === "KO") {
       value = 1 - normalCdf(h);
       label = "ДЧМ-КО";
-      latex = `p_{ош}=1-\\Phi(h)`;
+      latex = `p_{\\text{ош}}=1-\\Phi(h)`;
     } else if (params.modulation === "DCHM") {
       value = 0.5 * Math.exp(-h2 / 2);
       label = "ДЧМ-НО";
-      latex = `p_{ош}=0{,}5e^{-h^2/2}`;
+      latex = `p_{\\text{ош}}=0{,}5e^{-h^2/2}`;
     } else if (params.reception === "SF") {
       value = 0.5 * Math.exp(-h2);
       label = "ДОФМ-СФ";
-      latex = `p_{ош}=0{,}5e^{-h^2}`;
+      latex = `p_{\\text{ош}}=0{,}5e^{-h^2}`;
     } else {
       const pDfm = 1 - normalCdf(Math.SQRT2 * h);
       value = 2 * pDfm * (1 - pDfm);
       label = "ДОФМ-СП";
-      latex = `p_{ош}=2p_{ДФМ}(1-p_{ДФМ}),\\quad p_{ДФМ}=1-\\Phi(\\sqrt{2}h)`;
+      latex = `p_{\\text{ош}}=2p_{ДФМ}(1-p_{ДФМ}),\\quad p_{ДФМ}=1-\\Phi(\\sqrt{2}h)`;
     }
     return { value, label, latex, h, h2 };
   }
@@ -135,7 +138,7 @@
 
   function getReceiverSchemeNote(params) {
     const mod = params.modulation, rx = params.reception;
-    const modeName = `${mod}-${rx}`;
+    const modeName = `${MOD_LABELS[mod] || mod}-${RX_LABELS[rx] || rx}`;
     const tract = {
       "DAM-KO": "z(t) \\to \\text{ППФ} \\to \\text{когерентный детектор} \\to \\text{РУ} \\to \\hat b_k^\\mu",
       "DAM-NO": "z(t) \\to \\text{ППФ} \\to \\text{детектор огибающей} \\to \\text{РУ} \\to \\hat b_k^\\mu",
@@ -172,14 +175,14 @@
     if (mod === "DAM") {
       return `<div class="stage-panel__info-box decision-rule-box">
         <strong>Правило РУ (ДАМ):</strong>
-        <span>один отклик \(U_k\) сравнивается с порогом \(U_0=${u0_val.toFixed(4)}\) В:</span>
+        <span>один отклик \\(U_k\\) сравнивается с порогом \\(U_0=${u0_val.toFixed(4)}\\) В:</span>
         <span class="decision-rule-formula">\\( \\hat b_k = \\begin{cases} 1, & U_k > U_0 \\\\ 0, & U_k \\le U_0 \\end{cases} \\)</span>
       </div>`;
     }
     if (mod === "DCHM") {
       return `<div class="stage-panel__info-box decision-rule-box">
         <strong>Правило РУ (ДЧМ):</strong>
-        <span>два отклика \(U_{1,k}\) и \(U_{2,k}\) подаются на вычитатель:</span>
+        <span>два отклика \\(U_{1,k}\\) и \\(U_{2,k}\\) подаются на вычитатель:</span>
         <span class="decision-rule-formula">\\( \\hat b_k = \\begin{cases} 1, & U_{2,k} > U_{1,k} \\\\ 0, & U_{2,k} \\le U_{1,k} \\end{cases} \\)</span>
       </div>`;
     }
@@ -478,7 +481,7 @@
       const mod = params.modulation, rx = params.reception;
       const schemeDesc = SignalData.receiver_desc || getReceiverDescription(params);
 
-      const branchReason = `Так как в варианте выбрана ${mod} и режим приёма ${rx}, используется тракт: ${schemeDesc}.`;
+      const branchReason = `Так как в варианте выбрана ${MOD_LABELS[mod] || mod} и режим приёма ${RX_LABELS[rx] || rx}, используется тракт: ${schemeDesc}.`;
       let theory = `Детектор принимает решение по стробам внутри битовых интервалов. Функциональная схема вверху карточки показывает физический тракт приёмника для выбранной пары «модуляция + способ приёма». Ошибочный такт подсвечивается, когда восстановленный бит не совпал с переданным.`;
       let formulas = `<div class="formula-preview"><span>Порог решающего устройства</span>\\[ ${mod === "DAM" ? `U_0=\\frac{U_m}{2}=\\frac{${toLatexNumber((SignalData.Um || 0).toFixed(4))}}{2}=${toLatexNumber(u0.toFixed(4))}\\text{ В}` : `U_0=0\\text{ В}`} \\]</div>`;
 
@@ -503,10 +506,10 @@
         }
       }
 
-      formulas += `<div class="formula-preview"><span>Вероятность ошибки (${pErr.label})</span>\\[ ${pErr.latex}, \\quad h=\\sqrt{${toLatexNumber(pErr.h2)}}=${toLatexNumber(pErr.h.toFixed(4))}, \\quad p_{ош}\\approx ${pErrText} \\]</div>`;
+      formulas += `<div class="formula-preview"><span>Вероятность ошибки (${pErr.label})</span>\\[ ${pErr.latex}, \\quad h=\\sqrt{${toLatexNumber(pErr.h2)}}=${toLatexNumber(pErr.h.toFixed(4))}, \\quad p_{\\text{ош}}\\approx ${pErrText} \\]</div>`;
       formulas += `<div class="formula-preview"><span>Ошибки показанной реализации</span>\\[ N_{ош}=${SignalData.errors.length},\\quad N_b=${bitCount},\\quad BER_{эмп}=\\frac{N_{ош}}{N_b}=${empiricalText} \\]</div>`;
       formulas += `<div class="stage-panel__info-box"><strong>Почему этот тракт:</strong><br>${branchReason}</div>`;
-      formulas += `<div class="stage-panel__info-box"><strong>Связь с графиком:</strong><br>Каждый \\(U_k\\) вычислен непосредственно из показанного \\(z(t)\\) по алгоритму выбранного тракта. Красный крест появляется только тогда, когда реальное пороговое решение не совпало с переданным битом. Теоретическое \\(p_{ош}\\) не назначает ошибки, а служит ориентиром; на короткой реализации \\(BER_{эмп}\\) может отличаться.</div>`;
+      formulas += `<div class="stage-panel__info-box"><strong>Связь с графиком:</strong><br>Каждый \\(U_k\\) вычислен непосредственно из показанного \\(z(t)\\) по алгоритму выбранного тракта. Красный крест появляется только тогда, когда реальное пороговое решение не совпало с переданным битом. Теоретическое \\(p_{\\text{ош}}\\) не назначает ошибки, а служит ориентиром; на короткой реализации \\(BER_{эмп}\\) может отличаться.</div>`;
       return { theory, formulas };
     }
   };

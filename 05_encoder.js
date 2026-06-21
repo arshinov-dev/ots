@@ -206,8 +206,8 @@
         <text x="${W * 0.56 + barW / 2}" y="${probH - 8}" fill="#62716b" font-family="monospace" font-size="14" text-anchor="middle">1</text>
         <line x1="${W * 0.16}" y1="${probH - 24 - 0.5 * (probH - 46)}" x2="${W * 0.86}" y2="${probH - 24 - 0.5 * (probH - 46)}" stroke="#e74c3c" stroke-width="1.6" stroke-dasharray="6,6" />`;
       probSvg += `</svg>`;
-      const zoomScale = `<dl class="visual-scale"><div><dt>Окно</dt><dd>биты ${zoom.start + 1}-${zoom.end}</dd></div><div><dt>Символ</dt><dd>\\(\\tau_{сим}=${tauSim.toFixed(4)}\\) мс, \\(\\mu=${mu}\\)</dd></div><div><dt>Отсчёт</dt><dd>\\(\\Delta t=${dt.toFixed(4)}\\) мс</dd></div></dl>`;
-      const spectrumScale = `<dl class="visual-scale"><div><dt>Спектр</dt><dd>\\(B(f)\\), нормировано</dd></div><div><dt>Первый ноль</dt><dd>\\(1/\\tau_{сим}=${(1 / tauSim).toFixed(2)}\\) кГц</dd></div><div><dt>Полоса</dt><dd>\\(\\Delta f_ц=${(2 / tauSim).toFixed(2)}\\) кГц</dd></div></dl>`;
+      const zoomScale = `<dl class="visual-scale"><div><dt>Окно</dt><dd>биты ${zoom.start + 1}-${zoom.end}</dd></div><div><dt>Символ</dt><dd>\\(\\tau_{\\text{сим}}=${tauSim.toFixed(4)}\\) мс, \\(\\mu=${mu}\\)</dd></div><div><dt>Отсчёт</dt><dd>\\(\\Delta t=${dt.toFixed(4)}\\) мс</dd></div></dl>`;
+      const spectrumScale = `<dl class="visual-scale"><div><dt>Спектр</dt><dd>\\(B(f)\\), нормировано</dd></div><div><dt>Первый ноль</dt><dd>\\(1/\\tau_{\\text{сим}}=${(1 / tauSim).toFixed(2)}\\) кГц</dd></div><div><dt>Полоса</dt><dd>\\(\\Delta f_{\\text{ц}}=${(2 / tauSim).toFixed(2)}\\) кГц</dd></div></dl>`;
       const probScale = `<dl class="visual-scale"><div><dt>\\(p(0)\\)</dt><dd>${p0.toFixed(4)}</dd></div><div><dt>\\(p(1)\\)</dt><dd>${p1.toFixed(4)}</dd></div><div><dt>Ожидание</dt><dd>для симметричного гауссовского входа близко к 0.5</dd></div></dl>`;
 
       const codeTableCollapsible = `<details class="visual-step"><summary class="visual-step__summary"><span>Таблица</span><strong>Показать таблицу кодов</strong></summary><div class="visual-step__body">${codeTable}</div></details>`;
@@ -237,8 +237,8 @@
       const p1 = SignalData.bit_probabilities?.one ?? 0.5;
       let theory = `Кодер превращает номер уровня в безызбыточную \\(\\mu=${mu}\\)-битную комбинацию. Один отсчёт \\(\\Delta t=${dt.toFixed(4)}\\) мс распадается на \\(\\mu=${mu}\\) прямоугольных символов, поэтому изменение разрядности меняет битовую скорость и спектр.`;
       let formulas = `<div class="formula-preview"><span>Разрядность кодера</span>\\[ L+1=${levelCount}=2^{${mu}} \\implies \\mu=\\log_2(L+1)=${mu}\\text{ бит},\\quad L=${thresholdCount} \\]</div>`;
-      formulas += `<div class="formula-preview"><span>Длительность символа</span>\\[ \\tau_{сим} = \\frac{\\Delta t}{\\mu} = \\frac{${toLatexNumber(dt.toFixed(4))}}{${mu}} \\approx ${toLatexNumber(tauSim.toFixed(4))} \\text{ мс} \\]</div>`;
-      formulas += `<div class="formula-preview"><span>Оценка ширины спектра цифрового сигнала</span>\\[ \\Delta f_ц = \\frac{k_1}{\\tau_{сим}},\\quad k_1=${k1},\\quad \\Delta f_ц \\approx ${toLatexNumber(digitalBandwidth.toFixed(2))} \\text{ кГц} \\]</div>`;
+      formulas += `<div class="formula-preview"><span>Длительность символа</span>\\[ \\tau_{\\text{сим}} = \\frac{\\Delta t}{\\mu} = \\frac{${toLatexNumber(dt.toFixed(4))}}{${mu}} \\approx ${toLatexNumber(tauSim.toFixed(4))} \\text{ мс} \\]</div>`;
+      formulas += `<div class="formula-preview"><span>Оценка ширины спектра цифрового сигнала</span>\\[ \\Delta f_{\\text{ц}} = \\frac{k_1}{\\tau_{\\text{сим}}},\\quad k_1=${k1},\\quad \\Delta f_{\\text{ц}} \\approx ${toLatexNumber(digitalBandwidth.toFixed(2))} \\text{ кГц} \\]</div>`;
       formulas += `<div class="formula-preview"><span>Энтропия квантованных сообщений</span>\\[ H_y=-\\sum_{j=1}^{${levelCount}}p_j\\log_2p_j\\approx ${toLatexNumber(entropy.toFixed(3))}\\text{ бит/отсчёт} \\]</div>`;
       formulas += `<div class="formula-preview"><span>Кодовые расстояния</span>\\[ d_{lm}=\\sum_{r=1}^{\\mu} b_l^r\\oplus_2 b_m^r \\]</div>`;
       formulas += `<div class="formula-preview"><span>Априорные вероятности битов</span>\\[ p(0)=\\frac{1}{\\mu}\\sum_{j=1}^{${levelCount}}n_j(0)p_j\\approx ${toLatexNumber(p0.toFixed(4))},\\quad p(1)=\\frac{1}{\\mu}\\sum_{j=1}^{${levelCount}}n_j(1)p_j\\approx ${toLatexNumber(p1.toFixed(4))} \\]</div>`;

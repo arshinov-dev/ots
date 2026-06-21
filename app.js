@@ -19,8 +19,8 @@
     { id: "encoder", title: "Кодер АЦП", group: "tx", signal: `${formula(String.raw`v_k^j`)} → ${formula(String.raw`b_k^\mu`)}` },
     { id: "modulator", title: "Модулятор и выход ПДУ", group: "tx", signal: `${formula(String.raw`b_k^\mu`)} + ${formula(String.raw`u_{н}(t)`)} → ${formula(String.raw`s(t,b_k^\mu)`)} → ${formula(String.raw`S(t)`)}` },
     { id: "channel", title: "Непрерывный канал связи", group: "channel", signal: `${formula(String.raw`S(t)`)} → ${formula(String.raw`z(t)=\chi S(t)+n(t)`)}` },
-    { id: "detector", title: "Вход ПРУ, детектор и РУ", group: "rx", signal: `${formula(String.raw`z(t)`)} → ${formula(String.raw`\hat b_k^\mu`)}` },
-    { id: "decoder", title: "Декодер и интерполятор ЦАП", group: "rx", signal: `${formula(String.raw`\hat b_k^\mu`)} → ${formula(String.raw`\hat x(t)`)}` },
+    { id: "detector", title: "Вход ПРУ, детектор и РУ", group: "rx", signal: `${formula(String.raw`z(t)`)} → ${formula(String.raw`\hat s(t,b_k^\mu)`)} → ${formula(String.raw`U_k`)} → ${formula(String.raw`\hat b_k^\mu`)}` },
+    { id: "decoder", title: "Декодер и интерполятор ЦАП", group: "rx", signal: `${formula(String.raw`\hat b_k^\mu`)} → ${formula(String.raw`\hat v_k^j`)} → ${formula(String.raw`\hat x(t)`)}` },
     { id: "recipient", title: "Приёмный ФНЧ и получатель", group: "rx", signal: `${formula(String.raw`\hat x(t)`)} → ${formula(String.raw`\hat g(t)`)} → ${formula(String.raw`\hat c(t)`)}` },
   ];
 
@@ -33,6 +33,7 @@
         "Сначала смотри временную реализацию: это один возможный вид сообщения.",
         `Затем связывай её с ${formula(String.raw`B_c(\tau)`)}: корреляция показывает, как быстро сигнал забывает прошлые значения.`,
         `После этого переходи к ${formula(String.raw`G_g(f)`)}: спектр объясняет, какую полосу должен пропустить тракт.`,
+        `Первичный преобразователь считается линейным, поэтому статистические характеристики сообщения сохраняются: ${formula(String.raw`B_c(\tau)`)} используется для первичного сигнала ${formula(String.raw`g(t)`)} и даёт ${formula(String.raw`G_g(f)`)} по Винеру–Хинчину.`,
       ],
     },
     "tx-filter": {
@@ -128,27 +129,27 @@
       text: `Корреляционная функция объясняет форму спектра, а спектр задаёт рабочую полосу ${formula(String.raw`\Delta f_g`)}.`,
     },
     "tx-filter": {
-      chain: formula(String.raw`\Delta f_g\to f_{ср}\to\xi_ф^2`),
+      chain: formula(String.raw`\Delta f_g\to f_{\text{ср}}\to\xi_{\text{ф}}^2`),
       text: `ФНЧ пропускает полосу ${formula(String.raw`\Delta f_g`)} и отсекает спектральный хвост; отсечённая энергия становится ошибкой фильтрации.`,
     },
     sampler: {
-      chain: formula(String.raw`\Delta f_g,\alpha\to f_д\to\Delta t`),
+      chain: formula(String.raw`\Delta f_g,\alpha\to f_{\text{д}}\to\Delta t`),
       text: `Чем шире спектр и больше запас ${formula(String.raw`\alpha`)}, тем чаще нужно брать отсчёты.`,
     },
     quantizer: {
-      chain: formula(String.raw`W_g(x)\to p_j\to\Delta U,\mu\to\xi_{кв}^2`),
+      chain: formula(String.raw`W_g(x)\to p_j\to\Delta U,\mu\to\xi_{\text{кв}}^2`),
       text: `Распределение амплитуд объясняет вероятности уровней, а шаг ${formula(String.raw`\Delta U`)} определяет шум квантования.`,
     },
     encoder: {
-      chain: formula(String.raw`\mu\to\tau_{сим}\to\Delta f_ц\to\Delta f_s`),
+      chain: formula(String.raw`\mu\to\tau_{\text{сим}}\to\Delta f_{\text{ц}}\to\Delta f_s`),
       text: `Чем больше бит в кодовом слове, тем короче битовый символ и шире цифровой/модулированный спектр.`,
     },
     modulator: {
-      chain: formula(String.raw`\mu\to\tau_{сим}\to\Delta f_ц\to\Delta f_s`),
+      chain: formula(String.raw`\mu\to\tau_{\text{сим}}\to\Delta f_{\text{ц}}\to\Delta f_s`),
       text: `Длительность битового символа задаёт цифровую полосу, а вид модуляции превращает её в ${formula(String.raw`\Delta f_s`)}.`,
     },
     channel: {
-      chain: formula(String.raw`\Delta f_s\to P_ш=N_0\Delta f_s\to P_s=h^2P_ш\to U_m`),
+      chain: formula(String.raw`\Delta f_s\to P_{\text{ш}}=N_0\Delta f_s\to P_s=h^2P_{\text{ш}}\to U_m`),
       text: `Полоса сигнала определяет, сколько шума попадёт в приёмник, а через ${formula(String.raw`h^2`)} задаётся требуемая мощность сигнала для выбранной полосы.`,
     },
     detector: {
@@ -156,11 +157,11 @@
       text: `Приёмник берёт отсчёт отклика и сравнивает его с порогом или откликом другого канала.`,
     },
     decoder: {
-      chain: formula(String.raw`\hat b_k^\mu\to\hat v_k^j\to\xi_п^2\to\delta_\Sigma^2`),
+      chain: formula(String.raw`\hat b_k^\mu\to\hat v_k^j\to\xi_{\text{п}}^2\to\delta_\Sigma^2`),
       text: `Ошибочный бит превращается в неправильный уровень, который входит в шум передачи и итоговую ошибку.`,
     },
     recipient: {
-      chain: formula(String.raw`\hat b_k^\mu\to\hat v_k^j\to\xi_п^2\to\delta_\Sigma^2`),
+      chain: formula(String.raw`\hat b_k^\mu\to\hat v_k^j\to\xi_{\text{п}}^2\to\delta_\Sigma^2`),
       text: `Ошибки восстановленных уровней вместе с фильтрацией и квантованием образуют итоговую ошибку.`,
     },
   };
@@ -415,7 +416,7 @@
   const parameterLabels = {
     signalPower: [formula(String.raw`P_g`), "В²"], beta: [formula(String.raw`\beta`), "мс⁻¹"], signalBandwidth: [formula(String.raw`\Delta f_g`), ""],
     samplingIncrease: [formula(String.raw`\alpha`), ""], noiseDensity: [formula(String.raw`N_0`), "мВт/Гц"], signalNoiseRatio: [formula(String.raw`h^2`), ""],
-    acceptableError: [formula(String.raw`\delta_{доп}^2`), ""],
+    acceptableError: [formula(String.raw`\delta_{\text{доп}}^2`), ""],
   };
 
   const stageControlMeta = {
@@ -427,7 +428,7 @@
     secondaryFrequency: { label: formula(String.raw`f_1`), min: 40, max: 130, step: 0.1, unit: "МГц" },
     noiseDensity: { label: formula(String.raw`N_0`), min: 0.00001, max: 0.001, step: 0.00001, unit: "" },
     signalNoiseRatio: { label: formula(String.raw`h^2`), min: 1, max: 25, step: 0.1, unit: "" },
-    acceptableError: { label: formula(String.raw`\delta_{доп}^2`), min: 0.01, max: 1, step: 0.01, unit: "" },
+    acceptableError: { label: formula(String.raw`\delta_{\text{доп}}^2`), min: 0.01, max: 1, step: 0.01, unit: "" },
   };
 
   const stageControlMap = {
@@ -503,9 +504,9 @@
     const outputTypes = outputs.map((s) => s.type).join("; ");
     let html = `<div class="signal-flow-block">`;
     html += `<div class="signal-flow-row">`;
-    html += `<div class="signal-flow-cell"><span>Вход</span><strong>${inputSymbols}</strong></div>`;
+    html += `<div class="signal-flow-cell"><span class="signal-flow-label">Вход</span><span class="signal-flow-formula">${inputSymbols}</span></div>`;
     html += `<div class="signal-flow-arrow">→</div>`;
-    html += `<div class="signal-flow-cell"><span>Выход</span><strong>${outputSymbols}</strong></div>`;
+    html += `<div class="signal-flow-cell"><span class="signal-flow-label">Выход</span><span class="signal-flow-formula">${outputSymbols}</span></div>`;
     html += `</div>`;
     html += `<div class="signal-flow-types"><span><em>Вход:</em> ${escapeHtml(inputTypes)}</span><span><em>Выход:</em> ${escapeHtml(outputTypes)}</span></div>`;
     html += `</div>`;
@@ -522,13 +523,13 @@
     const paramLabels = {
       Pg: formula(String.raw`P_g`), beta: formula(String.raw`\beta`), signalBandwidth: formula(String.raw`\Delta f_g`),
       samplingIncrease: formula(String.raw`\alpha`), eta: formula(String.raw`\eta`), sigmaG: formula(String.raw`\sigma_g`), dfg: formula(String.raw`\Delta f_g`),
-      filterError: formula(String.raw`\xi_ф^2`), samplingFrequency: formula(String.raw`f_д`),
+      filterError: formula(String.raw`\xi_{\text{ф}}^2`), samplingFrequency: formula(String.raw`f_{\text{д}}`),
       samplingInterval: formula(String.raw`\Delta t`), conditionalStep: formula(String.raw`\Delta u_{усл}`),
-      mu: formula(String.raw`\mu`), levelCount: formula(String.raw`L`), bitDuration: formula(String.raw`\tau_{сим}`),
-      digitalBandwidth: formula(String.raw`\Delta f_ц`), quantizationNoise: formula(String.raw`\xi_{кв}^2`),
-      modulatedBandwidth: formula(String.raw`\Delta f_s`), noisePower: formula(String.raw`P_ш`),
+      mu: formula(String.raw`\mu`), levelCount: formula(String.raw`L`), bitDuration: formula(String.raw`\tau_{\text{сим}}`),
+      digitalBandwidth: formula(String.raw`\Delta f_{\text{ц}}`), quantizationNoise: formula(String.raw`\xi_{\text{кв}}^2`),
+      modulatedBandwidth: formula(String.raw`\Delta f_s`), noisePower: formula(String.raw`P_{\text{ш}}`),
       signalPower: formula(String.raw`P_s`), Um: formula(String.raw`U_m`),
-      errorProbability: formula(String.raw`p_{ош}`), transmissionNoise: formula(String.raw`\xi_п^2`),
+      errorProbability: formula(String.raw`p_{\text{ош}}`), transmissionNoise: formula(String.raw`\xi_{\text{п}}^2`),
       totalError: formula(String.raw`\delta_\Sigma^2`), channelCapacity: formula(String.raw`C`),
       noiseDensity: formula(String.raw`N_0`), signalNoiseRatio: formula(String.raw`h^2`),
       Dg: formula(String.raw`D_g`), deltaU1: formula(String.raw`\Delta u_1`),
