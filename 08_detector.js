@@ -354,7 +354,6 @@
         });
       }
 
-      SignalData.empirical_ber = numBits ? SignalData.errors.length / numBits : 0;
       SignalData.coherent_detects = coherentDetects;
       SignalData.detector_channel1 = channel1Values;
       SignalData.detector_channel2 = channel2Values;
@@ -408,7 +407,7 @@
       const responseMargin = params.modulation === "DCHM" && SignalData.detector_channel1.length
         ? Math.min(...SignalData.detector_channel1.slice(zoom.start, zoom.end).map((value, index) => Math.abs((SignalData.detector_channel2[zoom.start + index] || 0) - value)))
         : Math.min(...traces.map((trace) => Math.abs(trace.val - u0_val)));
-      const decisionScale = `<dl class="visual-scale"><div><dt>Окно</dt><dd>биты ${zoom.start + 1}-${zoom.end}</dd></div><div><dt>${errorsInWindow ? "Ошибки" : "Запас"}</dt><dd>${errorsInWindow ? `${errorsInWindow} в окне` : `min=${Number.isFinite(responseMargin) ? responseMargin.toFixed(4) : "0.0000"}`}</dd></div><div><dt>Стробы</dt><dd>в середине символа</dd></div></dl>`;
+      const decisionScale = `<dl class="visual-scale"><div><dt>Окно</dt><dd>биты ${zoom.start + 1}-${zoom.end}</dd></div><div><dt>${errorsInWindow ? "Несовпадения" : "Запас"}</dt><dd>${errorsInWindow ? `${errorsInWindow} в показанном окне` : `min=${Number.isFinite(responseMargin) ? responseMargin.toFixed(4) : "0.0000"}`}</dd></div><div><dt>Стробы</dt><dd>в середине символа</dd></div></dl>`;
 
       // --- ФПВ ---
       const pdfH = 240;
@@ -475,14 +474,11 @@
       const pErr = SignalData.p_err_formula || getErrorProbability(params);
       const u0 = SignalData.u0 || 0;
       const pErrText = pErr.value > 0 ? pErr.value.toExponential(3).replace(".", "{,}") : "0";
-      const empiricalBer = SignalData.empirical_ber || 0;
-      const empiricalText = empiricalBer > 0 ? empiricalBer.toExponential(3).replace(".", "{,}") : "0";
-      const bitCount = SignalData.b_t?.length || 0;
       const mod = params.modulation, rx = params.reception;
       const schemeDesc = SignalData.receiver_desc || getReceiverDescription(params);
 
       const branchReason = `Так как в варианте выбрана ${MOD_LABELS[mod] || mod} и режим приёма ${RX_LABELS[rx] || rx}, используется тракт: ${schemeDesc}.`;
-      let theory = `Детектор принимает решение по стробам внутри битовых интервалов. Функциональная схема вверху карточки показывает физический тракт приёмника для выбранной пары «модуляция + способ приёма». Ошибочный такт подсвечивается, когда восстановленный бит не совпал с переданным.`;
+      let theory = `Детектор принимает решение по стробам внутри битовых интервалов. Функциональная схема вверху карточки показывает физический тракт приёмника для выбранной пары «модуляция + способ приёма». На показанном фрагменте локально отмечается несовпадение принятого и переданного бита; эта отметка не используется как статистическая оценка вероятности ошибки.`;
       let formulas = `<div class="formula-preview"><span>Порог решающего устройства</span>\\[ ${mod === "DAM" ? `U_0=\\frac{U_m}{2}=\\frac{${toLatexNumber((SignalData.Um || 0).toFixed(4))}}{2}=${toLatexNumber(u0.toFixed(4))}\\text{ В}` : `U_0=0\\text{ В}`} \\]</div>`;
 
       if (mod === "DAM") {
@@ -507,9 +503,8 @@
       }
 
       formulas += `<div class="formula-preview"><span>Вероятность ошибки (${pErr.label})</span>\\[ ${pErr.latex}, \\quad h=\\sqrt{${toLatexNumber(pErr.h2)}}=${toLatexNumber(pErr.h.toFixed(4))}, \\quad p_{\\text{ош}}\\approx ${pErrText} \\]</div>`;
-      formulas += `<div class="formula-preview"><span>Ошибки показанной реализации</span>\\[ N_{ош}=${SignalData.errors.length},\\quad N_b=${bitCount},\\quad BER_{эмп}=\\frac{N_{ош}}{N_b}=${empiricalText} \\]</div>`;
       formulas += `<div class="stage-panel__info-box"><strong>Почему этот тракт:</strong><br>${branchReason}</div>`;
-      formulas += `<div class="stage-panel__info-box"><strong>Связь с графиком:</strong><br>Каждый \\(U_k\\) вычислен непосредственно из показанного \\(z(t)\\) по алгоритму выбранного тракта. Красный крест появляется только тогда, когда реальное пороговое решение не совпало с переданным битом. Теоретическое \\(p_{\\text{ош}}\\) не назначает ошибки, а служит ориентиром; на короткой реализации \\(BER_{эмп}\\) может отличаться.</div>`;
+      formulas += `<div class="stage-panel__info-box"><strong>Связь с графиком:</strong><br>Каждый \\(U_k\\) вычислен непосредственно из показанного \\(z(t)\\) по алгоритму выбранного тракта. Красный крест показывает только локальное несовпадение решения с переданным битом на этом фрагменте. В основном расчёте используется только теоретическая \\(p_{\\text{ош}}\\) из методики; число локальных несовпадений не подставляется в формулу вероятности.</div>`;
       return { theory, formulas };
     }
   };

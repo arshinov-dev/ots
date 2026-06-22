@@ -199,6 +199,36 @@
     function chooseDynamicWindow(values, options = {}) {
       const total = Array.isArray(values) ? values.length : 0;
       if (!total) return { start: 0, end: 0, length: 0, values: [] };
+
+      // Сквозные временные графики используют один интервал исходной сетки.
+      // Для массивов отсчётов переводим его в их локальные индексы.
+      const signalData = window.SignalData;
+      const shared = !options.ignoreShared && signalData && signalData.shared_time_window;
+      if (shared) {
+        let start = 0;
+        let end = total;
+        const fullRateArrays = [signalData.g_t, signalData.x_t, signalData.x_hat_t, signalData.g_hat_t];
+        if (fullRateArrays.includes(values)) {
+          start = clamp(shared.start, 0, Math.max(0, total - 1));
+          end = clamp(shared.end, start + 1, total);
+        } else {
+          const sampleArrays = [
+            signalData.sampled_x_values, signalData.quantized_indices, signalData.quantized_v,
+            signalData.v_hat, signalData.decoded_indices
+          ];
+          if (sampleArrays.includes(values)) {
+            const step = Math.max(1, signalData.sampling_step_indices || 1);
+            start = clamp(Math.floor(shared.start / step), 0, Math.max(0, total - 1));
+            end = clamp(Math.ceil(shared.end / step), start + 1, total);
+          } else {
+            start = -1;
+          }
+        }
+        if (start >= 0) {
+          return { start, end, length: end - start, values: values.slice(start, end) };
+        }
+      }
+
       const minLength = Math.min(total, Math.max(8, options.minLength || 80));
       const targetLength = options.length || Math.round(total * (options.fraction || 0.28));
       const length = Math.min(total, Math.max(minLength, targetLength));
@@ -364,8 +394,10 @@
     process: function(params, SignalData) {
       const N = SignalData.N;
       const vm = window.VisualMath;
-      const dfg = vm.safeNumber(params.signalBandwidth, 28);
+      const calculation = SignalData.calculation || window.SystemCalculations.calculate(params);
+      const dfg = calculation.input.dfg;
       const Pg = vm.safeNumber(params.signalPower, 1.5);
+      const beta = vm.safeNumber(params.beta, 14);
       const sigmaG = Math.sqrt(Pg);
       SignalData.yMax = 4 * sigmaG;
       SignalData.yMin = -4 * sigmaG;
@@ -375,16 +407,17 @@
       const componentCount = 96;
       const df = spectrumWindow.max / componentCount;
       const components = [];
+      const correlationSalt = vm.getCorrelationKind(params).split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
+      const realizationSalt = 13 + beta * 0.37 + dfg * 0.11 + correlationSalt * 0.001;
 
       for (let m = 0; m < componentCount; m++) {
         const frequency = (m + 0.5) * df;
         const spectralDensity = vm.spectrumValue(frequency, params);
         const baseAmplitude = Math.sqrt(Math.max(0, 2 * spectralDensity * df));
-        const jitter = 0.75 + 0.5 * vm.hashNoise(m, 7);
         components.push({
           frequency,
-          amplitude: baseAmplitude * jitter,
-          phase: 2 * Math.PI * vm.hashNoise(m, 13),
+          amplitude: baseAmplitude,
+          phase: 2 * Math.PI * vm.hashNoise(m, realizationSalt),
         });
       }
 
@@ -406,6 +439,14 @@
         SignalData.g_t[i] = (SignalData.g_t[i] - mean) * scale;
       }
       SignalData.source_components = components.map((component) => ({ ...component, amplitude: component.amplitude * scale }));
+      SignalData.source_component_count = componentCount;
+      SignalData.source_frequency_step = df;
+      SignalData.source_raw_mean = mean;
+      SignalData.source_raw_variance = variance;
+      SignalData.source_normalization_scale = scale;
+      SignalData.source_sample_mean = SignalData.g_t.reduce((sum, value) => sum + value, 0) / N;
+      SignalData.source_sample_variance = SignalData.g_t.reduce((sum, value) => sum + Math.pow(value - SignalData.source_sample_mean, 2), 0) / N;
+      SignalData.source_bandwidth = dfg;
       SignalData.source_time_span_ms = vm.getTimeSpanMs(params);
       SignalData.source_sigma = sigmaG;
       let spectralEnergy = 0;
@@ -426,8 +467,12 @@
       const vm = window.VisualMath;
       const Pg = vm.safeNumber(params.signalPower, 1.5);
       const beta = vm.safeNumber(params.beta, 14);
-      const dfg = vm.safeNumber(params.signalBandwidth, 28);
+      const calculation = SignalData.calculation || window.SystemCalculations.calculate(params);
+      const dfg = calculation.input.dfg;
       const sigmaG = Math.sqrt(Pg);
+      const values = SignalData.g_t;
+      const sampleMean = values.reduce((sum, value) => sum + value, 0) / values.length;
+      const sampleVariance = values.reduce((sum, value) => sum + Math.pow(value - sampleMean, 2), 0) / values.length;
 
       const dynamicWindow = vm.chooseDynamicWindow(SignalData.g_t, {
         minLength: Math.min(96, SignalData.g_t.length),
@@ -474,18 +519,73 @@
         <text class="plot-note" x="${W / 2}" y="22" text-anchor="middle">Δfg</text>`;
       const spectrumSvg = vm.chartSvg({
         W, H: 220, xMin: -fMax, xMax: fMax, yMin: 0, yMax: spectrumPeak * 1.1,
-        xLabel: "f, кГц", yLabel: "G_g(f), В²/кГц", samples: spectrumSamples, color: "#287c9f", extra: spectrumExtra
+        xLabel: "f", yLabel: "Gg(f)", samples: spectrumSamples, color: "#287c9f", extra: spectrumExtra
       });
-      const pdfNote = `<div class="stage-panel__info-box">Одномерная плотность вероятности гауссовского сигнала: \\( W_g(u)=\\dfrac{1}{\\sigma_g\\sqrt{2\\pi}}\\exp\\left(-\\dfrac{u^2}{2\\sigma_g^2}\\right) \\), где \\( \\sigma_g=${sigmaG.toFixed(3)} \\) В.</div>`;
+
+      const binCount = 28;
+      const xMin = -4 * sigmaG;
+      const xMax = 4 * sigmaG;
+      const binWidth = (xMax - xMin) / binCount;
+      const counts = new Array(binCount).fill(0);
+      values.forEach((value) => {
+        if (value < xMin || value > xMax) return;
+        const index = Math.min(binCount - 1, Math.floor((value - xMin) / binWidth));
+        counts[index]++;
+      });
+      const density = counts.map((count) => count / (values.length * binWidth));
+      const normalPdf = (u) => Math.exp(-(u * u) / (2 * sigmaG * sigmaG)) / (sigmaG * Math.sqrt(2 * Math.PI));
+      const pdfSamples = vm.makeSamples(xMin, xMax, 240, normalPdf);
+      const pdfYMax = Math.max(...density, normalPdf(0)) * 1.16;
+      const pdfH = 280;
+      const pdfX = (u) => ((u - xMin) / (xMax - xMin)) * W;
+      const pdfY = (densityValue) => pdfH - (densityValue / pdfYMax) * pdfH;
+      let histogramSvg = `<svg viewBox="0 0 ${W} ${pdfH}" width="100%" height="auto" class="stage-panel__visuals-svg source-histogram">`;
+      histogramSvg += vm.axes(W, pdfH, pdfH - 18, "u", "Wg(u)", { xMin, xMax, yMin: 0, yMax: pdfYMax });
+      density.forEach((densityValue, index) => {
+        const x = pdfX(xMin + index * binWidth);
+        const width = Math.max(1, pdfX(xMin + (index + 1) * binWidth) - x - 1);
+        const y = pdfY(densityValue);
+        histogramSvg += `<rect class="source-histogram__bar" x="${x}" y="${y}" width="${width}" height="${pdfH - y}" />`;
+      });
+      histogramSvg += vm.drawXYCurve(pdfSamples, W, pdfH, xMin, xMax, 0, pdfYMax, "#e74c3c", 3);
+      [
+        { value: -3 * sigmaG, label: "−3σg" }, { value: -sigmaG, label: "−σg" },
+        { value: 0, label: "0" }, { value: sigmaG, label: "+σg" },
+        { value: 3 * sigmaG, label: "+3σg" }
+      ].forEach(({ value, label }, index) => {
+        const x = pdfX(value);
+        const labelY = index % 2 ? 48 : 32;
+        histogramSvg += `<line class="source-histogram__marker" x1="${x}" y1="20" x2="${x}" y2="${pdfH - 18}" />
+          <text class="plot-note" x="${x}" y="${labelY}" text-anchor="middle">${label}</text>`;
+      });
+      histogramSvg += `</svg>`;
+
+      const synthesisBlock = `<section class="source-synthesis" aria-labelledby="source-synthesis-title">
+        <h3 id="source-synthesis-title">Как построена реализация \\(g(t)\\)</h3>
+        <p><strong>Это не независимый белый шум, нарисованный по точкам.</strong> На графике показана синтезированная реализация стационарного гауссовского случайного процесса.</p>
+        <ol>
+          <li>По заданной корреляционной функции \\(B_c(\\tau)\\) через преобразование Винера–Хинчина задаётся спектральная плотность \\(G_g(f)\\).</li>
+          <li>По \\(G_g(f)\\) выбираются 96 гармонических компонент: \\(f_m=(m+\\tfrac12)\\Delta f\\), \\(A_m=\\sqrt{2G_g(f_m)\\Delta f}\\), фазы \\(\\varphi_m\\) фиксируются для текущего набора параметров.</li>
+          <li>Компоненты суммируются на общей временной сетке: \\(g_0(t_i)=\\sum_{m=0}^{95}A_m\\cos(2\\pi f_m t_i+\\varphi_m)\\). Это же временное окно используется в сквозных графиках тракта.</li>
+          <li>Полученная реализация центрируется: \\(M_0=\\frac1N\\sum_i g_0(t_i)\\), \\(g_c(t_i)=g_0(t_i)-M_0\\), поэтому \\(M\{g(t)\}=0\\).</li>
+          <li>Реализация масштабируется: \\(D_0=\\frac1N\\sum_i g_c^2(t_i)\\), \\(g(t_i)=\\sqrt{P_g/D_0}\\,g_c(t_i)\\). В результате \\(D_g=P_g\\), \\(\\sigma_g=\\sqrt{P_g}\\).</li>
+        </ol>
+        <p class="source-synthesis__bandwidth">Рабочая полоса задаётся как \\(\\Delta f_g=k\\beta=${dfg.toFixed(2)}\\text{ кГц}\\). Параметр \\(\\beta\\) меняет форму \\(B_c(\\tau)\\), \\(G_g(f)\\) и амплитуды гармоник; \\(k\\) задаёт эффективную полосу, используемую далее и при выборе спектрального окна синтеза.</p>
+        <div class="source-stat-check"><strong>Проверка реализации:</strong><span>\\(M_{\\text{выб}}\{g\}=${sampleMean.toFixed(4)}\\text{ В}\\)</span><span>\\(D_{\\text{выб}}\{g\}=${sampleVariance.toFixed(4)}\\text{ В}^2\\)</span><span>задано: \\(M\{g\}=0\\), \\(D_g=P_g=${Pg.toFixed(4)}\\text{ В}^2\\)</span></div>
+      </section>`;
       const timeScale = `<dl class="visual-scale"><div><dt>Среднее</dt><dd>\\(M\{g\}=0\\) В</dd></div><div><dt>СКО</dt><dd>\\(\\sigma_g=${sigmaG.toFixed(3)}\\) В</dd></div><div><dt>Окно</dt><dd>${(timeEnd - timeStart).toFixed(3)} мс</dd></div></dl>`;
       const corrScale = `<dl class="visual-scale"><div><dt>В нуле</dt><dd>\\(B_c(0)=P_g=${Pg.toFixed(3)}\\) В²</dd></div><div><dt>Параметр формы</dt><dd>\\(\\beta=${beta.toFixed(2)}\\) мс⁻¹</dd></div><div><dt>Диапазон</dt><dd>±${tauMax.toFixed(3)} мс</dd></div></dl>`;
       const spectrumScale = `<dl class="visual-scale"><div><dt>Полоса</dt><dd>\\(\\Delta f_g=${dfg.toFixed(2)}\\) кГц</dd></div><div><dt>Распределение</dt><dd>\\(G_g(f)\\), В²/кГц</dd></div></dl>`;
+      const pdfScale = `<dl class="visual-scale"><div><dt>Интервалы</dt><dd>${binCount}</dd></div><div><dt>Диапазон</dt><dd>\\(\\pm4\\sigma_g\\)</dd></div><div><dt>Выборка</dt><dd>${values.length} значений</dd></div></dl>`;
+
+      const caption = (shown, next, note = "") => `<div class="stage-visual-caption"><p><strong>Показывает:</strong> ${shown}</p><p><strong>Нужно дальше:</strong> ${next}</p>${note ? `<p class="stage-visual-caption__note">${note}</p>` : ""}</div>`;
 
       return `<div class="stage-panel__visuals-stack">
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">1. Временная реализация \\(g(t)\\)</p>${timeScale}${timeSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">2. Корреляционная функция \\(B_c(\\tau)\\)</p>${corrScale}${corrSvg}</div>
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">3. Спектральная плотность \\(G_g(f)\\)</p>${spectrumScale}${spectrumSvg}</div>
-        <details class="stage-panel__visuals-layer"><summary class="stage-panel__visuals-header">Гауссовское распределение \\(W_g(u)\\)</summary>${pdfNote}</details>
+        ${synthesisBlock}
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">1. Временная реализация \\(g(t)\\)</p>${timeScale}${timeSvg}${caption("одну синтезированную реализацию случайного процесса \\(g(t)\\).", "этот же сигнал проходит через ФНЧ, дискретизатор, квантователь и восстановление.")}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">2. Корреляционная функция \\(B_c(\\tau)\\)</p>${corrScale}${corrSvg}${caption("как быстро значения процесса теряют связь при увеличении \\(\\tau\\).", "форма \\(B_c(\\tau)\\) задаёт спектральную плотность \\(G_g(f)\\).")}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">3. Спектральная плотность \\(G_g(f)\\)</p>${spectrumScale}${spectrumSvg}${caption("как мощность процесса распределена по частотам.", "по \\(G_g(f)\\) выбираются гармонические компоненты и определяется рабочая полоса \\(\\Delta f_g\\).")}</div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">4. Гистограмма значений \\(g(t)\\) и теоретическая ФПВ \\(W_g(u)\\)</p>${pdfScale}${histogramSvg}<div class="stage-panel__info-box source-pdf-formula">\\(W_g(u)=\\dfrac{1}{\\sigma_g\\sqrt{2\\pi}}\\exp\\left(-\\dfrac{u^2}{2\\sigma_g^2}\\right)\\), где \\(\\sigma_g=\\sqrt{P_g}=${sigmaG.toFixed(3)}\\text{ В}\\).</div>${caption("распределение значений текущей реализации \\(g(t)\\).", "гауссовская ФПВ \\(W_g(u)\\) используется при расчёте вероятностей уровней квантования.", "Из-за конечной длины реализации гистограмма только приближает теоретическую ФПВ.")}</div>
       </div>`;
     },
 
@@ -496,7 +596,7 @@
       const sigmaG = Math.sqrt(Pg);
       const meta = window.VisualMath.getCorrelationMeta(params);
       const kActual = parseFloat(params.bandwidthFactor) || meta.k;
-      let theory = "Источник моделирует сообщение как стационарный гауссовский процесс. Его форма важна сразу в трёх областях: во времени, через корреляцию и через спектральную плотность мощности.";
+      let theory = "Источник формирует синтезированную реализацию стационарного гауссовского случайного процесса: 96 косинусоид получают амплитуды из спектральной плотности, суммируются, центрируются и нормируются к заданной мощности. Поэтому временной график, корреляция, спектр и гистограмма описывают одну согласованную модель.";
       let formulas = `<div class="formula-preview"><span>Мощность сигнала</span>\\[ P_g = \\sigma_g^2 = ${toLatexNumber(Pg)} \\text{ В}^2, \\quad \\sigma_g = ${toLatexNumber(sigmaG.toFixed(3))} \\text{ В} \\]</div>`;
       formulas += `<div class="formula-preview"><span>Корреляционная функция варианта</span>\\[ ${params.correlationFunction || "B_c(\\tau)"} \\]</div>`;
       formulas += `<div class="formula-preview"><span>Ширина спектра по коэффициенту формы</span>\\[ \\Delta f_g = k\\beta = ${toLatexNumber(kActual)}\\cdot ${toLatexNumber(beta)} = ${toLatexNumber(dfg)} \\text{ кГц} \\]</div>`;

@@ -13,7 +13,7 @@
 
   const stages = [
     { id: "source", title: "Источник и первичный преобразователь", group: "source", signal: `${formula(String.raw`c(t)`)} → ${formula(String.raw`g(t)`)}` },
-    { id: "tx-filter", title: "Передающий ФНЧ", group: "tx", signal: `${formula(String.raw`g(t)`)} → ${formula(String.raw`x(t)`)}` },
+    { id: "tx-filter", title: "ФНЧ передающего устройства", group: "tx", signal: `${formula(String.raw`g(t)`)} → ${formula(String.raw`x(t)`)}` },
     { id: "sampler", title: "Дискретизатор АЦП", group: "tx", signal: `${formula(String.raw`x(t)`)} → ${formula(String.raw`x(k\Delta t)`)}` },
     { id: "quantizer", title: "Квантователь АЦП", group: "tx", signal: `${formula(String.raw`x(k\Delta t)`)} → ${formula(String.raw`v_k^j`)}` },
     { id: "encoder", title: "Кодер АЦП", group: "tx", signal: `${formula(String.raw`v_k^j`)} → ${formula(String.raw`b_k^\mu`)}` },
@@ -27,13 +27,13 @@
   const stageGuides = {
     source: {
       input: `исходное сообщение ${formula(String.raw`c(t)`)}`,
-      action: `превращаем сообщение в электрический случайный процесс ${formula(String.raw`g(t)`)}`,
+      action: `синтезируем ${formula(String.raw`g(t)`)} как сумму 96 гармоник, заданных спектральной плотностью ${formula(String.raw`G_g(f)`)}`,
       output: `первичный сигнал ${formula(String.raw`g(t)`)}`,
       points: [
-        "Сначала смотри временную реализацию: это один возможный вид сообщения.",
-        `Затем связывай её с ${formula(String.raw`B_c(\tau)`)}: корреляция показывает, как быстро сигнал забывает прошлые значения.`,
-        `После этого переходи к ${formula(String.raw`G_g(f)`)}: спектр объясняет, какую полосу должен пропустить тракт.`,
-        `Первичный преобразователь считается линейным, поэтому статистические характеристики сообщения сохраняются: ${formula(String.raw`B_c(\tau)`)} используется для первичного сигнала ${formula(String.raw`g(t)`)} и даёт ${formula(String.raw`G_g(f)`)} по Винеру–Хинчину.`,
+        `Цепочка построения: ${formula(String.raw`B_c(\tau)`)} → ${formula(String.raw`G_g(f)`)} → частоты и амплитуды 96 косинусоид → их сумма ${formula(String.raw`g_0(t)`)}`,
+        `После синтеза из реализации вычитается выборочное среднее, затем она масштабируется так, чтобы ${formula(String.raw`M\{g\}=0`)} и ${formula(String.raw`D_g=P_g`)}`,
+        `Четыре графика показывают одну и ту же модель с разных сторон: реализацию, корреляцию, спектр и распределение значений.`,
+        `Временной фрагмент синхронизирован с последующими сквозными графиками, поэтому форму ${formula(String.raw`g(t)`)} можно сопоставлять с фильтрацией, отсчётами и восстановлением.`,
       ],
     },
     "tx-filter": {
@@ -169,6 +169,9 @@
   // DOM элементы
   const route = document.querySelector("[data-signal-route]");
   const panel = document.querySelector("[data-stage-panel]");
+  const workspaceLayout = document.querySelector(".workspace-layout");
+  const workspaceShell = workspaceLayout?.parentElement;
+  let structuralScheme = null;
   const year = document.querySelector("[data-current-year]");
   const parametersForm = document.querySelector("[data-parameters-form]");
   const summary = document.querySelector("[data-parameters-summary]");
@@ -672,6 +675,7 @@
     if (SignalData.lastParamsString === paramsSignature && SignalData.g_hat_t) return;
 
     SignalData.resetDerived();
+    delete SignalData.shared_time_window;
     SignalData.calculation = window.SystemCalculations.calculate(params);
     const stageIds = ["source", "tx-filter", "sampler", "quantizer", "encoder", "modulator", "channel", "detector", "decoder", "recipient"];
     for (const id of stageIds) {
@@ -679,6 +683,23 @@
       if (handler && handler.process) {
         handler.process(params, SignalData);
       }
+    }
+
+    // Единое окно для сквозного сравнения g(t) -> x(t) -> отсчёты -> восстановление.
+    // Опорный фрагмент выбирается среди восстановленных уровней и переводится
+    // в индексы исходной временной сетки.
+    const referenceValues = SignalData.v_hat || SignalData.sampled_x_values || [];
+    if (window.VisualMath && referenceValues.length) {
+      const referenceLength = Math.min(10, referenceValues.length);
+      const referenceWindow = window.VisualMath.chooseDynamicWindow(referenceValues, {
+        minLength: Math.min(6, referenceLength),
+        length: referenceLength,
+        ignoreShared: true,
+      });
+      const step = Math.max(1, SignalData.sampling_step_indices || 1);
+      const start = Math.min(SignalData.N - 1, referenceWindow.start * step);
+      const end = Math.min(SignalData.N, Math.max(start + 2, referenceWindow.end * step));
+      SignalData.shared_time_window = { start, end, length: end - start };
     }
     SignalData.lastParamsString = paramsSignature;
   }
@@ -778,6 +799,7 @@
       if (!window.MathJax || typeof window.MathJax.typesetPromise !== "function") return;
       const elements = [correlationPreview, summaryCorrelationFormula, summaryBandwidthFormula, summary].filter(Boolean);
       if (route) elements.push(route);
+      if (structuralScheme) elements.push(structuralScheme);
       if (parametersForm) elements.push(parametersForm);
       // Рендерим все формулы внутри панели этапа
       const panelContent = document.querySelector('.stage-panel');
@@ -787,6 +809,85 @@
       window.MathJax.typesetClear(elements);
       window.MathJax.typesetPromise(elements).catch((err) => console.warn('MathJax error:', err));
     }, 100);
+  }
+
+  const structuralSchemeNodes = [
+    { stageId: "source", group: "source", short: "ИС", label: "Источник сообщения", signal: "c(t)" },
+    { stageId: "source", group: "source", short: "ПП", label: "Первичный преобразователь", signal: "g(t)" },
+    { stageId: "tx-filter", group: "tx", short: "ФНЧ", label: "ФНЧ передающего устройства", signal: "x(t)" },
+    { stageId: "sampler", group: "tx", short: "АЦП", label: "Дискретизатор", signal: "x(kΔt)" },
+    { stageId: "quantizer", group: "tx", short: "АЦП", label: "Квантователь", signal: "vₖʲ" },
+    { stageId: "encoder", group: "tx", short: "Кодер", label: "Кодер АЦП", signal: "bₖᵘ" },
+    { stageId: "modulator", group: "tx", short: "Модулятор", label: "Модулятор", signal: "S(t)" },
+    { stageId: "channel", group: "channel", short: "НКС", label: "Непрерывный канал связи", signal: "z(t)" },
+    { stageId: "detector", group: "rx", short: "ПРУ", label: "Входное устройство приёмника", signal: "ŝ(t)" },
+    { stageId: "detector", group: "rx", short: "Детектор", label: "Детектор и решающее устройство", signal: "b̂ₖᵘ" },
+    { stageId: "decoder", group: "rx", short: "Декодер", label: "Декодер ЦАП", signal: "v̂ₖʲ" },
+    { stageId: "decoder", group: "rx", short: "ЦАП", label: "Интерполятор ЦАП", signal: "x̂(t)" },
+    { stageId: "recipient", group: "rx", short: "ФНЧ", label: "ФНЧ приёмного устройства", signal: "ĝ(t)" },
+    { stageId: "recipient", group: "rx", short: "Получатель", label: "Выходной преобразователь и получатель", signal: "ĉ(t)" },
+  ];
+
+  function renderStructuralScheme() {
+    if (!workspaceLayout || !workspaceShell) return;
+    structuralScheme = document.createElement("section");
+    structuralScheme.className = "spi-structure";
+    structuralScheme.innerHTML = `<div class="spi-structure__summary">
+      <span><small>Опорная схема тракта</small><strong>Структурная схема СПИ</strong></span>
+    </div>
+    <div class="spi-structure__body">
+      <div class="spi-structure__legend" aria-label="Группы структурной схемы">
+        <span data-group="source"><i></i>Источник</span>
+        <span data-group="tx"><i></i>Передача и АЦП</span>
+        <span data-group="channel"><i></i>Канал связи</span>
+        <span data-group="rx"><i></i>Приём и ЦАП</span>
+      </div>
+      <div class="spi-structure__scroll" aria-label="Структурная схема">
+        <div class="spi-structure__lanes">
+          <div class="spi-structure__track spi-structure__track--forward" role="list"></div>
+          <div class="spi-structure__turn" aria-hidden="true"><span>\(z(t)\)</span><i>↓</i></div>
+          <div class="spi-structure__track spi-structure__track--return" role="list"></div>
+        </div>
+      </div>
+      <p class="spi-structure__hint">Нажмите на блок, чтобы перейти к его карточке. Подсвеченные блоки соответствуют выбранному этапу.</p>
+    </div>`;
+
+    const createNode = (node) => {
+      const block = document.createElement("button");
+      block.type = "button";
+      block.className = "spi-node";
+      block.dataset.stageId = node.stageId;
+      block.dataset.group = node.group;
+      block.setAttribute("role", "listitem");
+      block.setAttribute("aria-label", `${node.label}. Открыть этап.`);
+      block.innerHTML = `<span class="spi-node__short">${node.short}</span><span class="spi-node__label">${node.label}</span>`;
+      block.addEventListener("click", () => selectStage(node.stageId));
+      return block;
+    };
+
+    const createConnector = (signal, arrow) => {
+      const connector = document.createElement("span");
+      connector.className = "spi-connector";
+      connector.setAttribute("aria-hidden", "true");
+      connector.innerHTML = `<span>${signal}</span><i>${arrow}</i>`;
+      return connector;
+    };
+
+    const forwardTrack = structuralScheme.querySelector(".spi-structure__track--forward");
+    const forwardNodes = structuralSchemeNodes.slice(0, 8);
+    forwardNodes.forEach((node, index) => {
+      forwardTrack.append(createNode(node));
+      if (index < forwardNodes.length - 1) forwardTrack.append(createConnector(node.signal, "→"));
+    });
+
+    const returnTrack = structuralScheme.querySelector(".spi-structure__track--return");
+    const returnNodes = structuralSchemeNodes.slice(8).reverse();
+    returnNodes.forEach((node, index) => {
+      returnTrack.append(createNode(node));
+      if (index < returnNodes.length - 1) returnTrack.append(createConnector(returnNodes[index + 1].signal, "←"));
+    });
+
+    workspaceShell.insertBefore(structuralScheme, workspaceLayout);
   }
 
   function createStageCard(stage, index) {
@@ -940,12 +1041,21 @@
       card.classList.toggle("is-active", isActive);
       card.setAttribute("aria-pressed", String(isActive));
     });
+    document.querySelectorAll(".spi-node").forEach((node) => {
+      const isActive = node.dataset.stageId === stage.id;
+      node.classList.toggle("is-active", isActive);
+      node.setAttribute("aria-pressed", String(isActive));
+      if (isActive) {
+        node.setAttribute("aria-current", "step");
+      }
+      else node.removeAttribute("aria-current");
+    });
     renderPanel(stage);
   }
 
   function init() {
     renderVariantOptions(); updateConditionalFields(); updateDerivedFields();
-    renderParametersSummary(); renderRoute(); selectStage(stages[0].id);
+    renderParametersSummary(); renderRoute(); renderStructuralScheme(); selectStage(stages[0].id);
     year.textContent = new Date().getFullYear();
     parametersForm.addEventListener("input", handleParametersChange);
     parametersForm.addEventListener("change", handleParametersChange);
