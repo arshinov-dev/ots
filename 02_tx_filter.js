@@ -49,18 +49,17 @@
       const { W, H, yZero } = helpers;
       const vm = window.VisualMath;
       const dfg = vm.safeNumber(params.signalBandwidth, 28);
-      const dynamicWindow = vm.chooseDynamicWindow(SignalData.x_t, {
-        minLength: Math.min(96, SignalData.x_t.length),
-        length: Math.min(240, Math.max(96, Math.round(SignalData.x_t.length * 0.28)))
-      });
-      const timeStart = vm.indexToTimeMs(dynamicWindow.start, SignalData.x_t.length, params);
-      const timeEnd = vm.indexToTimeMs(Math.max(dynamicWindow.start, dynamicWindow.end - 1), SignalData.x_t.length, params);
-      const filteredSamples = dynamicWindow.values.map((value, index) => [
-        vm.indexToTimeMs(dynamicWindow.start + index, SignalData.x_t.length, params),
+      const tw = (SignalData.sync && SignalData.sync.timeWindow) || { start: 0, end: SignalData.x_t.length };
+      const dynStart = tw.start;
+      const dynEnd = Math.min(tw.end, SignalData.x_t.length);
+      const timeStart = vm.indexToTimeMs(dynStart, SignalData.x_t.length, params);
+      const timeEnd = vm.indexToTimeMs(Math.max(dynStart, dynEnd - 1), SignalData.x_t.length, params);
+      const filteredSamples = SignalData.x_t.slice(dynStart, dynEnd).map((value, index) => [
+        vm.indexToTimeMs(dynStart + index, SignalData.x_t.length, params),
         value
       ]);
-      const sourceSamples = SignalData.g_t.slice(dynamicWindow.start, dynamicWindow.end).map((value, index) => [
-        vm.indexToTimeMs(dynamicWindow.start + index, SignalData.g_t.length, params),
+      const sourceSamples = SignalData.g_t.slice(dynStart, dynEnd).map((value, index) => [
+        vm.indexToTimeMs(dynStart + index, SignalData.g_t.length, params),
         value
       ]);
 

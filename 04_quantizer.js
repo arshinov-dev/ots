@@ -73,21 +73,17 @@
       const { W, H, yZero } = helpers;
       const { sigmaG, thresholdCount, levelCount, mu, Dg, dU, thresholds, levels } = getQuantizerParams(params);
       const vm = window.VisualMath;
-      const visibleCount = Math.min(16, SignalData.quantized_indices.length);
-      const dynamicWindow = vm.chooseDynamicWindow(SignalData.quantized_indices, {
-        minLength: Math.min(10, visibleCount),
-        length: visibleCount
-      });
-      const visibleOriginal = SignalData.sampled_x_values.slice(dynamicWindow.start, dynamicWindow.end);
-      const visibleQuantized = SignalData.quantized_v.slice(dynamicWindow.start, dynamicWindow.end);
-      const visibleIndices = SignalData.quantized_indices.slice(dynamicWindow.start, dynamicWindow.end);
+      const sw = (SignalData.sync && SignalData.sync.sampleWindow) || { start: 0, end: Math.min(16, SignalData.quantized_indices.length) };
+      const visibleOriginal = SignalData.sampled_x_values.slice(sw.start, sw.end);
+      const visibleQuantized = SignalData.quantized_v.slice(sw.start, sw.end);
+      const visibleIndices = SignalData.quantized_indices.slice(sw.start, sw.end);
       const xAt = (index) => visibleOriginal.length > 1 ? (index / (visibleOriginal.length - 1)) * W : W / 2;
       const yAt = (value) => H - ((value - SignalData.yMin) / (SignalData.yMax - SignalData.yMin)) * H;
 
       let timeSvg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
       timeSvg += vm.axes(W, H, yZero, "k", "u, В", {
-        xMin: dynamicWindow.start + 1,
-        xMax: dynamicWindow.end,
+        xMin: sw.start + 1,
+        xMax: sw.end,
         yMin: SignalData.yMin,
         yMax: SignalData.yMax
       });

@@ -87,18 +87,16 @@
       const calc = SignalData.calculation || window.SystemCalculations.calculate(params);
       const dfg = calc.input.dfg;
       const acceptableError = parseFloat(params.acceptableError) || 0.12;
-      const shownStepCount = Math.min(10, SignalData.v_hat.length);
-      const stepWindow = vm.chooseDynamicWindow(SignalData.v_hat, {
-        minLength: Math.min(6, shownStepCount),
-        length: shownStepCount
-      });
-      const startIndex = Math.min(SignalData.N - 1, stepWindow.start * stepSize);
-      const endIndex = Math.min(SignalData.N - 1, Math.max(startIndex + 1, stepWindow.end * stepSize));
+      const sync = SignalData.sync || {};
+      const tw = sync.timeWindow || { start: 0, end: SignalData.N };
+      const sw = sync.sampleWindow || { start: 0, end: Math.min(10, SignalData.v_hat.length) };
+      const startIndex = Math.max(0, Math.min(tw.start, SignalData.N - 1));
+      const endIndex = Math.max(startIndex + 1, Math.min(tw.end, SignalData.N));
       const timeStart = vm.indexToTimeMs(startIndex, SignalData.N, params);
-      const timeEnd = vm.indexToTimeMs(endIndex, SignalData.N, params);
+      const timeEnd = vm.indexToTimeMs(Math.max(startIndex, endIndex - 1), SignalData.N, params);
       const sx = (index) => ((vm.indexToTimeMs(index, SignalData.N, params) - timeStart) / (timeEnd - timeStart)) * W;
       const sy = (value) => H - ((value - SignalData.yMin) / (SignalData.yMax - SignalData.yMin)) * H;
-      const curveSamples = (values) => values.slice(startIndex, endIndex + 1).map((value, offset) => [
+      const curveSamples = (values) => values.slice(startIndex, endIndex).map((value, offset) => [
         vm.indexToTimeMs(startIndex + offset, SignalData.N, params),
         value
       ]);
@@ -109,7 +107,7 @@
         xMin: timeStart, xMax: timeEnd, yMin: SignalData.yMin, yMax: SignalData.yMax
       });
       let stepD = "";
-      for (let wordIndex = stepWindow.start; wordIndex < stepWindow.end; wordIndex++) {
+      for (let wordIndex = sw.start; wordIndex < sw.end; wordIndex++) {
         const i = Math.min(SignalData.N - 1, wordIndex * stepSize);
         const next = Math.min(endIndex, (wordIndex + 1) * stepSize);
         const x1 = sx(i);
@@ -157,7 +155,7 @@
       compSvg += `</svg>`;
 
       const isSuccess = (SignalData.delta_sum_sq || 0) <= acceptableError;
-      const stepScale = `<dl class="visual-scale"><div><dt>Ступени</dt><dd>\\(\\hat x(t)\\), ${stepWindow.length} уровней</dd></div><div><dt>Сглаживание</dt><dd>\\(\\hat g(t)\\)</dd></div><div><dt>Общее окно</dt><dd>${(timeEnd - timeStart).toFixed(3)} мс</dd></div></dl>`;
+      const stepScale = `<dl class="visual-scale"><div><dt>Ступени</dt><dd>\\(\\hat x(t)\\), ${sw.end - sw.start} уровней</dd></div><div><dt>Сглаживание</dt><dd>\\(\\hat g(t)\\)</dd></div><div><dt>Общее окно</dt><dd>${(timeEnd - timeStart).toFixed(3)} мс</dd></div></dl>`;
       const compareScale = `<dl class="visual-scale"><div><dt>Синяя</dt><dd>исходное \\(g(t)\\)</dd></div><div><dt>Фиолетовая</dt><dd>восстановленное \\(\\hat g(t)\\)</dd></div><div><dt>Окно</dt><dd>совпадает с \\(\\hat x(t)\\)</dd></div></dl>`;
       const errorScale = `<dl class="visual-scale"><div><dt>Итог</dt><dd>\\(\\delta_\\Sigma^2=${(SignalData.delta_sum_sq || 0).toFixed(4)}\\)</dd></div><div><dt>Допуск</dt><dd>\\(\\delta_{\\text{доп}}^2=${acceptableError.toFixed(4)}\\)</dd></div><div><dt>Результат</dt><dd>${isSuccess ? "норма" : "требуется корректировка"}</dd></div></dl>`;
       return `<div class="stage-panel__visuals-stack">

@@ -144,7 +144,8 @@
         "v_hat", "chunkErrors", "received_code_words", "original_code_words", "error_code_words", "decoded_indices",
         "transmission_noise_sq", "transmission_noise_analytic_sq", "transmission_noise_meta", "transition_distance_factor",
         "x_hat_t", "g_hat_t", "lpf_half_window", "lpf_first_zero", "lpf_fc_norm",
-        "reconstruction_error_t", "visual_delta_sq", "delta_sum_sq", "delta_sum_components"
+"reconstruction_error_t", "visual_delta_sq", "delta_sum_sq", "delta_sum_components",
+        "sync", "shared_time_window"
       ];
       derivedFields.forEach((key) => { delete this[key]; });
       this.lastParamsString = null;

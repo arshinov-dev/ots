@@ -194,7 +194,17 @@
 
         renderSVG: function(id, params, helpers, SignalData) {
             const { W } = helpers;
-            const zoom = window.RadioMath.getZoomInfo(SignalData, 10);
+            const sync = SignalData.sync || {};
+            const bw = sync.bitWindowView || { start: 0, end: Math.min(10, (SignalData.b_t || []).length) };
+            const rw = sync.radioWindow || { start: 0, end: SignalData.radio_N || SignalData.N || 1 };
+            const b_t = SignalData.b_t || [];
+            const ppb = SignalData.radio_points_per_bit || ((SignalData.radio_N || b_t.length) / Math.max(1, b_t.length));
+            const zoom = {
+                start: bw.start, end: bw.end, length: bw.end - bw.start,
+                bits: b_t.slice(bw.start, bw.end),
+                pointsPerBit: ppb,
+                startIdx: rw.start, endIdx: Math.max(rw.start + 1, rw.end)
+            };
             const bitStepX = W / Math.max(1, zoom.length);
             const xOfIndex = (index) => ((index - zoom.startIdx) / Math.max(1, zoom.endIdx - zoom.startIdx)) * W;
 
@@ -391,7 +401,17 @@
 
         renderSVG: function(id, params, helpers, SignalData) {
             const { W } = helpers;
-            const zoom = window.RadioMath.getZoomInfo(SignalData, 10);
+            const sync = SignalData.sync || {};
+            const bw = sync.bitWindowView || { start: 0, end: Math.min(10, (SignalData.b_t || []).length) };
+            const rw = sync.radioWindow || { start: 0, end: SignalData.radio_N || SignalData.N || 1 };
+            const b_t = SignalData.b_t || [];
+            const ppb = SignalData.radio_points_per_bit || ((SignalData.radio_N || b_t.length) / Math.max(1, b_t.length));
+            const zoom = {
+                start: bw.start, end: bw.end, length: bw.end - bw.start,
+                bits: b_t.slice(bw.start, bw.end),
+                pointsPerBit: ppb,
+                startIdx: rw.start, endIdx: Math.max(rw.start + 1, rw.end)
+            };
             const bitStepX = W / Math.max(1, zoom.length);
             const xOfIndex = (index) => ((index - zoom.startIdx) / Math.max(1, zoom.endIdx - zoom.startIdx)) * W;
             const power = window.RadioMath.getPowerParams(params);

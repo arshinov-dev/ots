@@ -474,14 +474,13 @@
       const sampleMean = values.reduce((sum, value) => sum + value, 0) / values.length;
       const sampleVariance = values.reduce((sum, value) => sum + Math.pow(value - sampleMean, 2), 0) / values.length;
 
-      const dynamicWindow = vm.chooseDynamicWindow(SignalData.g_t, {
-        minLength: Math.min(96, SignalData.g_t.length),
-        length: Math.min(240, Math.max(96, Math.round(SignalData.g_t.length * 0.28)))
-      });
-      const timeStart = vm.indexToTimeMs(dynamicWindow.start, SignalData.g_t.length, params);
-      const timeEnd = vm.indexToTimeMs(Math.max(dynamicWindow.start, dynamicWindow.end - 1), SignalData.g_t.length, params);
-      const timeSamples = dynamicWindow.values.map((value, index) => [
-        vm.indexToTimeMs(dynamicWindow.start + index, SignalData.g_t.length, params),
+      const tw = (SignalData.sync && SignalData.sync.timeWindow) || { start: 0, end: SignalData.g_t.length };
+      const dynStart = tw.start;
+      const dynEnd = Math.min(tw.end, SignalData.g_t.length);
+      const timeStart = vm.indexToTimeMs(dynStart, SignalData.g_t.length, params);
+      const timeEnd = vm.indexToTimeMs(Math.max(dynStart, dynEnd - 1), SignalData.g_t.length, params);
+      const timeSamples = SignalData.g_t.slice(dynStart, dynEnd).map((value, index) => [
+        vm.indexToTimeMs(dynStart + index, SignalData.g_t.length, params),
         value
       ]);
       let timeSvg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="auto" class="stage-panel__visuals-svg">`;

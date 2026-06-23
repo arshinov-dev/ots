@@ -361,7 +361,17 @@
 
     renderSVG: function(id, params, helpers, SignalData) {
       const { W } = helpers;
-      const zoom = window.RadioMath.getZoomInfo(SignalData, 10);
+      const sync = SignalData.sync || {};
+      const bw = sync.bitWindowView || { start: 0, end: Math.min(10, (SignalData.b_t || []).length) };
+      const rw = sync.radioWindow || { start: 0, end: SignalData.radio_N || SignalData.N || 1 };
+      const b_t = SignalData.b_t || [];
+      const ppb = SignalData.radio_points_per_bit || ((SignalData.radio_N || b_t.length) / Math.max(1, b_t.length));
+      const zoom = {
+        start: bw.start, end: bw.end, length: bw.end - bw.start,
+        bits: b_t.slice(bw.start, bw.end),
+        pointsPerBit: ppb,
+        startIdx: rw.start, endIdx: Math.max(rw.start + 1, rw.end)
+      };
       const u0_val = params.modulation === "DAM" ? SignalData.Um / 2 : 0;
 
       // --- Функциональная схема приёмника ---
@@ -375,7 +385,9 @@
       // --- Главный график решения: отклики / порог / стробы / биты ---
       const decisionH = 260;
       const traces = SignalData.detectorTrace.slice(zoom.start, zoom.end);
-      const maxDecision = Math.max(1e-6, ...traces.map((trace) => Math.abs(trace.val)), Math.abs(u0_val), SignalData.Um || 0);
+      const rAxis = sync.responseAxis || {};
+      const rMax = Math.max(1e-6, Math.abs(rAxis.responseMax || 0), Math.abs(rAxis.responseMin || 0), Math.abs(u0_val), SignalData.Um || 0);
+      const maxDecision = rMax;
       const decisionY = (value) => decisionH / 2 - (value / maxDecision) * (decisionH * 0.32);
       const stepX = W / Math.max(1, traces.length);
       const barW = stepX * 0.5;

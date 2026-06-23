@@ -91,11 +91,8 @@
       const { W, getLocalY } = helpers;
       const { mu } = (SignalData.calculation || window.SystemCalculations.calculate(params)).coding;
       const vm = window.VisualMath;
-      const shownWordCount = Math.min(10, SignalData.received_code_words.length);
-      const wordWindow = vm.chooseDynamicWindow(SignalData.decoded_indices, {
-        minLength: Math.min(6, shownWordCount),
-        length: shownWordCount
-      });
+      const sync = SignalData.sync || {};
+      const wordWindow = sync.wordWindow || { start: 0, end: Math.min(10, SignalData.received_code_words.length) };
       const wordStart = wordWindow.start;
       const wordEnd = wordWindow.end;
       const visibleWords = Math.max(1, wordEnd - wordStart);

@@ -669,13 +669,352 @@
     return JSON.stringify(PARAM_SIGNATURE_FIELDS.map((name) => [name, params[name] ?? ""]));
   }
 
+// Метки видов модуляции для пользовательского интерфейса.
+  // Внутренние ключи DAM/DCHM/DOFM не переименовываются.
+  const MOD_LABELS = { DAM: "ДАМ", DCHM: "ДЧМ", DOFM: "ДОФМ" };
+
+  // Выбор главного временного окна по g(t) с учётом downstream-информативности.
+  // Окно должно хорошо показывать не только g(t), но и дискретизацию, квантование,
+  // кодирование и модуляцию. Возвращает { start, end } (end — не включительно).
+  function chooseMainTimeWindow(SignalData, params) {
+    const vm = window.VisualMath;
+    if (!vm) return { start: 0, end: 0 };
+
+    const g_t = SignalData.g_t || [];
+    const N = g_t.length;
+    if (!N) return { start: 0, end: 0 };
+
+    const step = Math.max(1, SignalData.sampling_step_indices || 1);
+    const targetSamples = Math.min(10, (SignalData.sampled_x_values || []).length || 10);
+    const rawLength = Math.max(32, targetSamples * step);
+    const length = Math.min(N, rawLength);
+
+    if (length >= N) return { start: 0, end: N };
+
+    const sampled_indices = SignalData.sampled_x_indices || [];
+    const sampled_values = SignalData.sampled_x_values || [];
+    const quantized_indices = SignalData.quantized_indices || [];
+    const b_t = SignalData.b_t || [];
+    const mu = SignalData.quantization_mu || 1;
+
+    // Предрасчёт глобальных границ для нормировки
+    let gMin = Infinity, gMax = -Infinity;
+    for (let i = 0; i < N; i++) {
+      if (g_t[i] < gMin) gMin = g_t[i];
+      if (g_t[i] > gMax) gMax = g_t[i];
+    }
+    const gRange = Math.max(1e-9, gMax - gMin);
+
+    const stride = Math.max(1, Math.floor(length / 16));
+    const lastStart = N - length;
+    let bestStart = 0;
+    let bestScore = -Infinity;
+
+    for (let start = 0; start <= lastStart; start += stride) {
+      const end = start + length;
+
+      // --- g(t) характеристики ---
+      let wMin = Infinity, wMax = -Infinity;
+      let variation = 0, turns = 0, prevDelta = 0, slopeEnergy = 0, zeroCross = 0;
+      for (let i = start; i < end; i++) {
+        const v = g_t[i];
+        if (v < wMin) wMin = v;
+        if (v > wMax) wMax = v;
+        if (i > start) {
+          const d = v - g_t[i - 1];
+          variation += Math.abs(d);
+          slopeEnergy += d * d;
+          if (prevDelta && d && Math.sign(d) !== Math.sign(prevDelta)) turns++;
+          if (d) prevDelta = d;
+          if (Math.sign(g_t[i - 1]) !== Math.sign(v) && g_t[i - 1] !== 0) zeroCross++;
+        }
+      }
+      const wRange = wMax - wMin;
+      const normRange = wRange / gRange;
+      const flatPenalty = wRange < gRange * 0.15 ? 1 : 0;
+
+      // --- downstream: отсчёты внутри окна ---
+      let sampleDiversity = 0, sampleCount = 0;
+      if (sampled_indices.length) {
+        for (let si = 0; si < sampled_indices.length; si++) {
+          const idx = sampled_indices[si];
+          if (idx >= start && idx < end) {
+            sampleDiversity += Math.abs(sampled_values[si] || 0);
+            sampleCount++;
+          }
+        }
+        if (sampleCount > 1) sampleDiversity = sampleDiversity / sampleCount;
+      }
+
+      // --- downstream: квантованные уровни ---
+      let quantDiversity = 0, uniqueLevels = {};
+      if (quantized_indices.length && sampleCount > 0) {
+        const kStart = Math.floor(start / step);
+        const kEnd = Math.ceil(end / step);
+        for (let k = kStart; k < kEnd && k < quantized_indices.length; k++) {
+          uniqueLevels[quantized_indices[k]] = true;
+        }
+        quantDiversity = Object.keys(uniqueLevels).length;
+      }
+
+      // --- downstream: битовые переходы ---
+      let bitTransitions = 0;
+      if (b_t.length && sampleCount > 0) {
+        const bitStart = Math.floor(start / step) * mu;
+        const bitEnd = Math.ceil(end / step) * mu;
+        for (let bi = bitStart + 1; bi < bitEnd && bi < b_t.length; bi++) {
+          if (Math.sign(b_t[bi]) !== Math.sign(b_t[bi - 1])) bitTransitions++;
+        }
+      }
+
+      const edgePenalty = (start < stride || end > N - stride) ? 1 : 0;
+
+      const score =
+        2.0 * normRange +
+        1.5 * zeroCross +
+        1.5 * (slopeEnergy / (length * gRange)) +
+        2.0 * sampleDiversity +
+        1.5 * quantDiversity +
+        1.0 * bitTransitions -
+        2.0 * edgePenalty -
+        1.0 * flatPenalty;
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestStart = start;
+      }
+    }
+
+    return { start: bestStart, end: bestStart + length };
+  }
+
+  // Вычисление всех синхронизированных осей и окон.
+  // Вызывается после полного processAllStages — detectorTrace, delta_sum_components
+  // и delta_sum_sq появляются только после detector/recipient.
+  function computeSyncAxes(SignalData, params) {
+    const vm = window.VisualMath;
+    const sync = {};
+
+    // ─── timeWindow (по g(t)) ───
+    const g_t = SignalData.g_t || [];
+    const N = SignalData.N || g_t.length;
+    if (g_t.length) {
+      sync.timeWindow = chooseMainTimeWindow(SignalData, params);
+    } else if ((SignalData.sampled_x_values || []).length) {
+      // Fallback через отсчёты, если g_t недоступен
+      const step = Math.max(1, SignalData.sampling_step_indices || 1);
+      const targetSamples = Math.min(10, SignalData.sampled_x_values.length);
+      const refWin = vm ? vm.chooseDynamicWindow(SignalData.sampled_x_values, {
+        minLength: Math.min(6, targetSamples),
+        length: targetSamples,
+        ignoreShared: true,
+      }) : { start: 0, end: targetSamples };
+      sync.timeWindow = {
+        start: Math.min(N - 1, refWin.start * step),
+        end: Math.min(N, Math.max(refWin.start * step + 2, refWin.end * step)),
+      };
+    } else {
+      sync.timeWindow = { start: 0, end: N };
+    }
+
+    const tw = sync.timeWindow;
+
+    // ─── sampleWindow (через sampled_x_indices) ───
+    const indices = SignalData.sampled_x_indices || [];
+    if (indices.length) {
+      let sampleStart = indices.findIndex(function(i) { return i >= tw.start; });
+      let sampleEnd = indices.findIndex(function(i) { return i >= tw.end; });
+      if (sampleStart < 0) sampleStart = 0;
+      if (sampleEnd < 0) sampleEnd = indices.length;
+      sync.sampleWindow = {
+        start: Math.max(0, sampleStart),
+        end: Math.max(sampleStart + 1, sampleEnd),
+      };
+    } else {
+      // Fallback через step
+      const step = Math.max(1, SignalData.sampling_step_indices || 1);
+      sync.sampleWindow = {
+        start: Math.floor(tw.start / step),
+        end: Math.min((SignalData.sampled_x_values || []).length || 0, Math.ceil(tw.end / step)),
+      };
+      if (sync.sampleWindow.end <= sync.sampleWindow.start) {
+        sync.sampleWindow.end = sync.sampleWindow.start + 1;
+      }
+    }
+
+    // ─── wordWindow (= sampleWindow: 1 квантованное значение = 1 кодовое слово) ───
+    sync.wordWindow = {
+      start: sync.sampleWindow.start,
+      end: sync.sampleWindow.end,
+    };
+
+    const mu = SignalData.quantization_mu || 1;
+    const wordStart = sync.wordWindow.start;
+    const wordEnd = sync.wordWindow.end;
+
+    // ─── bitWindowFull (wordWindow × μ) ───
+    sync.bitWindowFull = {
+      start: wordStart * mu,
+      end: Math.min((SignalData.b_t || []).length, wordEnd * mu),
+    };
+
+    // ─── bitWindowView (целые слова, ≤12 бит) ───
+    const visibleWords = Math.max(1, Math.floor(12 / mu));
+    sync.bitWindowView = {
+      start: sync.bitWindowFull.start,
+      end: Math.min(sync.bitWindowFull.start + visibleWords * mu, sync.bitWindowFull.end),
+    };
+
+    // ─── bitWindowContext (для ДОФМ: +1 бит слева как контекст) ───
+    sync.bitWindowContext = {
+      start: Math.max(0, sync.bitWindowView.start - 1),
+      end: sync.bitWindowView.end,
+    };
+
+    // ─── radioWindow (от bitWindowView для ДАМ/ДЧМ, от bitWindowContext для ДОФМ) ───
+    const isDOFM = params.modulation === "DOFM";
+    const bitSrc = isDOFM ? sync.bitWindowContext : sync.bitWindowView;
+    const radioN = SignalData.radio_N || SignalData.N || 0;
+    const numBits = (SignalData.b_t || []).length || 1;
+    const ppb = SignalData.radio_points_per_bit || (radioN / numBits);
+    sync.radioWindow = {
+      start: Math.floor(bitSrc.start * ppb),
+      end: Math.min(radioN, Math.ceil(bitSrc.end * ppb)),
+    };
+
+    // ─── frequencyAxis ───
+    const calc = SignalData.calculation || {};
+    sync.frequencyAxis = {
+      dfg: (calc.input || {}).dfg,
+      fd: (calc.sampling || {}).fd,
+      dfPcm: (calc.coding || {}).dfPcm,
+      dfSignal: (calc.radio || {}).dfSignal,
+      carrierMain: Number(params.primaryFrequency),
+      carrierAlt: Number(params.secondaryFrequency),
+      modulationKey: params.modulation,
+      modulationLabel: MOD_LABELS[params.modulation] || params.modulation,
+    };
+
+    // ─── amplitudeAxis (signal / noise / received) ───
+    const sigmaG = SignalData.source_sigma || 0;
+    const noiseSigma = SignalData.noiseSigma || 0;
+    let recvMin = Infinity, recvMax = -Infinity;
+    const z_t = SignalData.z_t || [];
+    const rw = sync.radioWindow;
+    for (let i = rw.start; i < rw.end && i < z_t.length; i++) {
+      if (z_t[i] < recvMin) recvMin = z_t[i];
+      if (z_t[i] > recvMax) recvMax = z_t[i];
+    }
+    if (!isFinite(recvMin)) { recvMin = -1; recvMax = 1; }
+    sync.amplitudeAxis = {
+      signal: {
+        sigma: sigmaG,
+        min: SignalData.yMin != null ? SignalData.yMin : -4 * sigmaG,
+        max: SignalData.yMax != null ? SignalData.yMax : 4 * sigmaG,
+      },
+      noise: {
+        sigma: noiseSigma,
+        min: -4 * noiseSigma,
+        max: 4 * noiseSigma,
+      },
+      received: {
+        min: recvMin,
+        max: recvMax,
+      },
+    };
+
+    // ─── levelAxis ───
+    sync.levelAxis = {
+      levels: SignalData.levels || [],
+      thresholds: SignalData.thresholds || [],
+      probabilities: SignalData.level_probabilities || [],
+      cumulative: SignalData.level_cumulative || [],
+      mu: mu,
+    };
+
+    // ─── responseAxis (по режиму модуляции) ───
+    let responseMin = Infinity, responseMax = -Infinity;
+    const modKey = params.modulation;
+    const trace = SignalData.detectorTrace || [];
+    const bwv = sync.bitWindowView;
+
+    if (modKey === "DCHM") {
+      // ДЧМ: оба канала
+      const ch1 = SignalData.detector_channel1 || [];
+      const ch2 = SignalData.detector_channel2 || [];
+      for (let k = bwv.start; k < bwv.end; k++) {
+        if (k < ch1.length) {
+          if (ch1[k] < responseMin) responseMin = ch1[k];
+          if (ch1[k] > responseMax) responseMax = ch1[k];
+        }
+        if (k < ch2.length) {
+          if (ch2[k] < responseMin) responseMin = ch2[k];
+          if (ch2[k] > responseMax) responseMax = ch2[k];
+        }
+      }
+    } else if (modKey === "DOFM") {
+      // ДОФМ-СП: coherent_detects; ДОФМ-СФ: detectorTrace
+      const cd = SignalData.coherent_detects || [];
+      if (cd.length) {
+        for (let k = bwv.start; k < bwv.end; k++) {
+          if (k < cd.length) {
+            if (cd[k] < responseMin) responseMin = cd[k];
+            if (cd[k] > responseMax) responseMax = cd[k];
+          }
+        }
+      } else if (trace.length) {
+        for (let k = bwv.start; k < bwv.end; k++) {
+          if (k < trace.length) {
+            const v = trace[k].val;
+if (v < responseMin) responseMin = v;
+          if (v > responseMax) responseMax = v;
+          }
+        }
+      }
+    } else {
+      // ДАМ (и fallback): detectorTrace + u0
+      for (let k = bwv.start; k < bwv.end; k++) {
+        if (k < trace.length) {
+          const v = trace[k].val;
+          if (v < responseMin) responseMin = v;
+          if (v > responseMax) responseMax = v;
+        }
+      }
+    }
+
+    // Учитываем порог u0 в диапазоне
+    const u0 = SignalData.u0 != null ? SignalData.u0 : 0;
+    if (u0 < responseMin) responseMin = u0;
+    if (u0 > responseMax) responseMax = u0;
+
+    if (!isFinite(responseMin)) { responseMin = -1; responseMax = 1; }
+    sync.responseAxis = {
+      threshold: u0,
+      responseMin: responseMin,
+      responseMax: responseMax,
+      mode: MOD_LABELS[modKey] || modKey,
+      receiverType: SignalData.receiver_type || "",
+    };
+
+    // ─── errorAxis ───
+    const dsc = SignalData.delta_sum_components || {};
+    sync.errorAxis = {
+      filterAbs: dsc.filterAbs,
+      quantAbs: dsc.quantAbs,
+      transmissionAbs: dsc.transmissionAbs,
+      deltaSumSq: SignalData.delta_sum_sq,
+      acceptableError: params.acceptableError != null ? Number(params.acceptableError) : null,
+    };
+
+    return sync;
+  }
+
   // Обработка данных для всех этапов последовательно
   function processAllStages(params) {
     const paramsSignature = getParamsSignature(params);
     if (SignalData.lastParamsString === paramsSignature && SignalData.g_hat_t) return;
 
     SignalData.resetDerived();
-    delete SignalData.shared_time_window;
     SignalData.calculation = window.SystemCalculations.calculate(params);
     const stageIds = ["source", "tx-filter", "sampler", "quantizer", "encoder", "modulator", "channel", "detector", "decoder", "recipient"];
     for (const id of stageIds) {
@@ -685,22 +1024,11 @@
       }
     }
 
-    // Единое окно для сквозного сравнения g(t) -> x(t) -> отсчёты -> восстановление.
-    // Опорный фрагмент выбирается среди восстановленных уровней и переводится
-    // в индексы исходной временной сетки.
-    const referenceValues = SignalData.v_hat || SignalData.sampled_x_values || [];
-    if (window.VisualMath && referenceValues.length) {
-      const referenceLength = Math.min(10, referenceValues.length);
-      const referenceWindow = window.VisualMath.chooseDynamicWindow(referenceValues, {
-        minLength: Math.min(6, referenceLength),
-        length: referenceLength,
-        ignoreShared: true,
-      });
-      const step = Math.max(1, SignalData.sampling_step_indices || 1);
-      const start = Math.min(SignalData.N - 1, referenceWindow.start * step);
-      const end = Math.min(SignalData.N, Math.max(start + 2, referenceWindow.end * step));
-      SignalData.shared_time_window = { start, end, length: end - start };
-    }
+    // Синхронизированные оси и окна — вычисляются один раз после всех stage.process()
+    SignalData.sync = computeSyncAxes(SignalData, params);
+    // Compatibility alias
+    SignalData.shared_time_window = SignalData.sync.timeWindow;
+
     SignalData.lastParamsString = paramsSignature;
   }
 

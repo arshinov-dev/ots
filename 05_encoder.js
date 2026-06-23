@@ -88,12 +88,7 @@
       const { mu, tauSim } = calculation.coding;
       const { levelCount } = calculation.quantizer;
       const dt = calculation.sampling.dt;
-      const maxWordsByBits = Math.max(4, Math.floor(24 / Math.max(1, mu)));
-      const targetWordCount = Math.min(6, maxWordsByBits, SignalData.code_words.length);
-      const wordWindow = vm.chooseDynamicWindow(SignalData.quantized_indices || [], {
-        minLength: Math.min(4, targetWordCount),
-        length: targetWordCount
-      });
+      const wordWindow = (SignalData.sync && SignalData.sync.wordWindow) || { start: 0, end: Math.min(6, SignalData.code_words.length) };
       const selectedWords = SignalData.code_words.slice(wordWindow.start, wordWindow.end);
       const selectedLevels = SignalData.quantized_v.slice(wordWindow.start, wordWindow.end);
       const selectedLevelIndices = SignalData.quantized_indices.slice(wordWindow.start, wordWindow.end);
@@ -137,9 +132,10 @@
       const matrixHead = `<tr><th>d</th>${Array.from({ length: levelCount }, (_, i) => `<th>${i + 1}</th>`).join("")}</tr>`;
       const distanceTable = `<div class="distance-table-wrap"><table class="distance-table"><thead>${matrixHead}</thead><tbody>${matrixRows}</tbody></table></div>`;
 
+      const bwFull = (SignalData.sync && SignalData.sync.bitWindowFull) || { start: wordWindow.start * mu, end: wordWindow.end * mu };
       const zoom = {
-        start: wordWindow.start * mu,
-        end: wordWindow.end * mu,
+        start: bwFull.start,
+        end: bwFull.end,
         length: selectedBits.length,
         bits: selectedBits
       };

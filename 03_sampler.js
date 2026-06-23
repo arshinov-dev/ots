@@ -25,19 +25,16 @@
       const fd = 2 * alpha * dfg;
       const dt = 1 / fd;
       const vm = window.VisualMath;
-      const visibleSampleCount = Math.min(16, SignalData.sampled_x_values.length);
-      const sampleWindow = vm.chooseDynamicWindow(SignalData.sampled_x_values, {
-        minLength: Math.min(10, visibleSampleCount),
-        length: visibleSampleCount
-      });
-      const visibleIndices = SignalData.sampled_x_indices.slice(sampleWindow.start, sampleWindow.end);
-      const visibleValues = SignalData.sampled_x_values.slice(sampleWindow.start, sampleWindow.end);
-      const startIndex = visibleIndices[0] || 0;
-      const lastVisibleIndex = visibleIndices.length ? visibleIndices[visibleIndices.length - 1] : startIndex;
-      const endIndex = lastVisibleIndex > startIndex ? lastVisibleIndex : Math.min(SignalData.x_t.length - 1, startIndex + 1);
+      const sync = SignalData.sync || {};
+      const tw = sync.timeWindow || { start: 0, end: SignalData.x_t.length };
+      const sw = sync.sampleWindow || { start: 0, end: Math.min(16, SignalData.sampled_x_values.length) };
+      const visibleIndices = SignalData.sampled_x_indices.slice(sw.start, sw.end);
+      const visibleValues = SignalData.sampled_x_values.slice(sw.start, sw.end);
+      const startIndex = tw.start;
+      const endIndex = Math.min(tw.end, SignalData.x_t.length);
       const timeStart = vm.indexToTimeMs(startIndex, SignalData.x_t.length, params);
-      const timeEnd = vm.indexToTimeMs(endIndex, SignalData.x_t.length, params);
-      const continuousSamples = SignalData.x_t.slice(startIndex, endIndex + 1).map((value, index) => [
+      const timeEnd = vm.indexToTimeMs(Math.max(startIndex, endIndex - 1), SignalData.x_t.length, params);
+      const continuousSamples = SignalData.x_t.slice(startIndex, endIndex).map((value, index) => [
         vm.indexToTimeMs(startIndex + index, SignalData.x_t.length, params),
         value
       ]);
