@@ -387,7 +387,38 @@
       return svg;
     }
 
-    return { clamp, safeNumber, getSampleStep, getTimeSpanMs, indexToTimeMs, hashNoise, deterministicNormal, getCorrelationKind, getCorrelationMeta, normalCdf, laplacePhi, getAnalyticFilterError, getSpectrumWindow, getEta, getLevelProbabilitiesAnalytic, getZoomWindow, chooseDynamicWindow, correlationValue, spectrumValue, axes, drawXYCurve, makeSamples, chartSvg };
+    // Обратное преобразование: время (мс) → индекс на сетке из count точек.
+    // indexToTimeMs(index, count, params) = (index/(count-1))*span  ⇒  index = (t/span)*(count-1)
+    function timeToIndex(timeMs, count, params) {
+      const n = Math.max(1, count - 1);
+      const span = getTimeSpanMs(params);
+      if (!span) return 0;
+      return Math.round((timeMs / span) * n);
+    }
+
+    // Downsample массива значений в buckets: каждый bucket = [min, max] значений.
+    // Возвращает плоский массив пар [{i, min, max}, ...] длиной ≤ buckets.
+    // Используется для overview-полосы полного g(t): ~400–800 вертикальных линий.
+    function downsampleMinMax(values, buckets) {
+      const n = values.length;
+      if (!n) return [];
+      const target = Math.max(1, Math.min(buckets || 600, n));
+      const bucketSize = n / target;
+      const result = [];
+      for (let b = 0; b < target; b++) {
+        const lo = Math.floor(b * bucketSize);
+        const hi = Math.max(lo + 1, Math.floor((b + 1) * bucketSize));
+        let mn = Infinity, mx = -Infinity;
+        for (let i = lo; i < hi && i < n; i++) {
+          if (values[i] < mn) mn = values[i];
+          if (values[i] > mx) mx = values[i];
+        }
+        if (isFinite(mn)) result.push({ i: Math.floor((lo + hi - 1) / 2), min: mn, max: mx });
+      }
+      return result;
+    }
+
+    return { clamp, safeNumber, getSampleStep, getTimeSpanMs, indexToTimeMs, timeToIndex, downsampleMinMax, hashNoise, deterministicNormal, getCorrelationKind, getCorrelationMeta, normalCdf, laplacePhi, getAnalyticFilterError, getSpectrumWindow, getEta, getLevelProbabilitiesAnalytic, getZoomWindow, chooseDynamicWindow, correlationValue, spectrumValue, axes, drawXYCurve, makeSamples, chartSvg };
   })();
 
   window.StageHandlers.source = {

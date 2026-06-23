@@ -788,6 +788,14 @@
     return { start: bestStart, end: bestStart + length };
   }
 
+  // Состояние ручного выбора фрагмента: { mode: "auto"|"manual", timeStartMs, timeEndMs, visibleWordsOverride }
+  // Хранится в SignalData.syncManual. При авто — берётся chooseMainTimeWindow.
+  // При ручном — timeWindow рассчитывается из timeStartMs/timeEndMs через timeToIndex.
+  function getSyncManual() {
+    if (!SignalData.syncManual) SignalData.syncManual = { mode: "auto", timeStartMs: null, timeEndMs: null, visibleWordsOverride: null };
+    return SignalData.syncManual;
+  }
+
   // Вычисление всех синхронизированных осей и окон.
   // Вызывается после полного processAllStages — detectorTrace, delta_sum_components
   // и delta_sum_sq появляются только после detector/recipient.
@@ -798,23 +806,34 @@
     // ─── timeWindow (по g(t)) ───
     const g_t = SignalData.g_t || [];
     const N = SignalData.N || g_t.length;
-    if (g_t.length) {
-      sync.timeWindow = chooseMainTimeWindow(SignalData, params);
-    } else if ((SignalData.sampled_x_values || []).length) {
-      // Fallback через отсчёты, если g_t недоступен
-      const step = Math.max(1, SignalData.sampling_step_indices || 1);
-      const targetSamples = Math.min(10, SignalData.sampled_x_values.length);
-      const refWin = vm ? vm.chooseDynamicWindow(SignalData.sampled_x_values, {
-        minLength: Math.min(6, targetSamples),
-        length: targetSamples,
-        ignoreShared: true,
-      }) : { start: 0, end: targetSamples };
-      sync.timeWindow = {
-        start: Math.min(N - 1, refWin.start * step),
-        end: Math.min(N, Math.max(refWin.start * step + 2, refWin.end * step)),
-      };
-    } else {
-      sync.timeWindow = { start: 0, end: N };
+    const syncManual = getSyncManual();
+
+    let manualApplied = false;
+    if (syncManual.mode === "manual" && Number.isFinite(syncManual.timeStartMs) && Number.isFinite(syncManual.timeEndMs) && N > 1 && vm && vm.timeToIndex) {
+      const iStart = Math.max(0, Math.min(N - 1, Math.round(vm.timeToIndex(syncManual.timeStartMs, N, params))));
+      let iEnd = Math.max(0, Math.min(N, Math.round(vm.timeToIndex(syncManual.timeEndMs, N, params))));
+      if (iEnd <= iStart) iEnd = Math.min(N, iStart + 1);
+      sync.timeWindow = { start: iStart, end: iEnd };
+      manualApplied = true;
+    }
+    if (!manualApplied) {
+      if (g_t.length) {
+        sync.timeWindow = chooseMainTimeWindow(SignalData, params);
+      } else if ((SignalData.sampled_x_values || []).length) {
+        const step = Math.max(1, SignalData.sampling_step_indices || 1);
+        const targetSamples = Math.min(10, SignalData.sampled_x_values.length);
+        const refWin = vm ? vm.chooseDynamicWindow(SignalData.sampled_x_values, {
+          minLength: Math.min(6, targetSamples),
+          length: targetSamples,
+          ignoreShared: true,
+        }) : { start: 0, end: targetSamples };
+        sync.timeWindow = {
+          start: Math.min(N - 1, refWin.start * step),
+          end: Math.min(N, Math.max(refWin.start * step + 2, refWin.end * step)),
+        };
+      } else {
+        sync.timeWindow = { start: 0, end: N };
+      }
     }
 
     const tw = sync.timeWindow;
@@ -859,7 +878,11 @@
     };
 
     // ─── bitWindowView (целые слова, ≤12 бит) ───
-    const visibleWords = Math.max(1, Math.floor(12 / mu));
+    // visibleWordsOverride — ручной выбор "показать слов" для модуляции/канала/детектора.
+    const autoVisibleWords = Math.max(1, Math.floor(12 / mu));
+    const visibleWords = (syncManual.mode === "manual" && syncManual.visibleWordsOverride)
+      ? Math.max(1, Math.min(autoVisibleWords, Math.floor(syncManual.visibleWordsOverride)))
+      : autoVisibleWords;
     sync.bitWindowView = {
       start: sync.bitWindowFull.start,
       end: Math.min(sync.bitWindowFull.start + visibleWords * mu, sync.bitWindowFull.end),
@@ -1029,7 +1052,299 @@ if (v < responseMin) responseMin = v;
     // Compatibility alias
     SignalData.shared_time_window = SignalData.sync.timeWindow;
 
-    SignalData.lastParamsString = paramsSignature;
+SignalData.lastParamsString = paramsSignature;
+  }
+
+  // ─── Управление сквозным фрагментом ───────────────────────────────────────
+  // Все контролы (главный в карточке 1 + локальные в 03/04/05/06/07/08/09)
+  // модифицируют SignalData.syncManual и через applySyncChange пересчитывают
+  // синхронизированные окна и оси (без пересчёта физики, если параметры те же).
+
+  function applySyncChange(updater) {
+    const sm = getSyncManual();
+    updater(sm);
+    const params = getParameters();
+    SignalData.sync = computeSyncAxes(SignalData, params);
+    SignalData.shared_time_window = SignalData.sync.timeWindow;
+
+    // Точечное обновление: не пересоздаём всю панель, чтобы не сбросить
+    // фокус и скролл. Обновляем только графики + summary/overview контрола.
+    const stage = getStage(currentStageId);
+    const handler = window.StageHandlers[stage.id];
+    const helpers = createSVGHelpers();
+
+    // 1) Перерисовываем графики (renderSVG читает обновлённый SignalData.sync).
+    const svgHost = panel.querySelector("[data-sync-svg-host]");
+    if (svgHost && handler && handler.renderSVG) {
+      svgHost.innerHTML = handler.renderSVG(stage.id, params, helpers, SignalData);
+      enhanceVisualLayers();
+    }
+
+    // 2) Обновляем summary и overview в контроле, не трогая поля ввода.
+    const syncControl = panel.querySelector("[data-sync-control]");
+    if (syncControl) {
+      const summary = syncControl.querySelector(".sync-fragment-control__summary");
+      if (summary) summary.textContent = syncInfoString();
+      // Overview SVG обновляем только у главного контроля.
+      const overviewWrap = syncControl.querySelector(".sync-overview");
+      if (overviewWrap) {
+        const newOverview = renderSyncOverviewSvg(params, SignalData);
+        const oldSvg = overviewWrap.querySelector(".sync-overview__svg");
+        if (oldSvg && newOverview) oldSvg.outerHTML = newOverview;
+      }
+    }
+
+    renderMath();
+  }
+
+  // Текущие значения полей в мс (для предзаполнения input-ов в карточке 1).
+  function currentSyncTimeWindowMs() {
+    const tw = (SignalData.sync && SignalData.sync.timeWindow) || { start: 0, end: SignalData.N || 1 };
+    const N = SignalData.N || (SignalData.g_t || []).length;
+    if (!N) return { start: 0, end: 0 };
+    const vm = window.VisualMath;
+    return {
+      start: vm.indexToTimeMs(tw.start, N, getParameters()),
+      end: vm.indexToTimeMs(Math.max(tw.start, tw.end - 1), N, getParameters()),
+    };
+  }
+
+  // Категория контроля по stageId.
+  function syncControlKind(stageId) {
+    if (stageId === "source") return "main";
+    if (stageId === "tx-filter") return "info";
+    if (["sampler", "quantizer", "encoder", "decoder"].includes(stageId)) return "samples";
+    if (["modulator", "channel", "detector"].includes(stageId)) return "words";
+    return null;
+  }
+
+  // overview g(t): тонкая min-max полоса с подсветкой выбранного окна.
+  function renderSyncOverviewSvg(params, SignalData) {
+    const vm = window.VisualMath;
+    const g_t = SignalData.g_t || [];
+    const N = g_t.length;
+    if (!N) return "";
+    const buckets = Math.min(700, N);
+    const ds = vm.downsampleMinMax(g_t, buckets);
+    const span = vm.getTimeSpanMs(params);
+    const yMin = SignalData.yMin, yMax = SignalData.yMax;
+    const W = 1000, H = 56;
+    const xOf = (i) => (i / Math.max(1, N - 1)) * W;
+    const yOf = (v) => H - ((v - yMin) / Math.max(1e-9, yMax - yMin)) * (H - 4) - 2;
+    let d = "";
+    ds.forEach((b) => {
+      const x = xOf(b.i);
+      const yTop = yOf(b.max), yBot = yOf(b.min);
+      d += `M ${x.toFixed(2)} ${yTop.toFixed(2)} L ${x.toFixed(2)} ${yBot.toFixed(2)} `;
+    });
+    const tw = (SignalData.sync && SignalData.sync.timeWindow) || { start: 0, end: N };
+    const hx1 = xOf(tw.start), hx2 = xOf(Math.max(tw.start + 1, tw.end - 1));
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="auto" class="sync-overview__svg" preserveAspectRatio="none" aria-hidden="true">
+      <path d="${d}" stroke="#287c9f" stroke-width="0.9" fill="none" opacity="0.85"/>
+      <rect x="${hx1.toFixed(2)}" y="0" width="${(hx2 - hx1).toFixed(2)}" height="${H}" fill="#e74c3c" opacity="0.18" stroke="#e74c3c" stroke-width="1" stroke-opacity="0.5"/>
+    </svg>`;
+  }
+
+  // Компактная информационная строка: t = ... мс, k = ..., биты r = ...
+  function syncInfoString() {
+    const sync = SignalData.sync || {};
+    const tw = sync.timeWindow || { start: 0, end: 0 };
+    const sw = sync.sampleWindow || { start: 0, end: 0 };
+    const bwv = sync.bitWindowView || { start: 0, end: 0 };
+    const params = getParameters();
+    const vm = window.VisualMath;
+    const N = SignalData.N || (SignalData.g_t || []).length;
+    const tStart = N ? vm.indexToTimeMs(tw.start, N, params) : 0;
+    const tEnd = N ? vm.indexToTimeMs(Math.max(tw.start + 1, tw.end - 1), N, params) : 0;
+    return `t = ${tStart.toFixed(2)}…${tEnd.toFixed(2)} мс · k = ${sw.start}…${sw.end} · биты r = ${bwv.start}…${bwv.end}`;
+  }
+
+  // Главный контроль (карточка 1): Авто/Ручной + tStart/tEnd + overview g(t).
+  function renderSyncMainControl(params, SignalData) {
+    const sm = getSyncManual();
+    const cur = currentSyncTimeWindowMs();
+    const span = window.VisualMath.getTimeSpanMs(params);
+    const tStartVal = Number.isFinite(sm.timeStartMs) ? sm.timeStartMs : cur.start;
+    const tEndVal = Number.isFinite(sm.timeEndMs) ? sm.timeEndMs : cur.end;
+    const isManual = sm.mode === "manual";
+    const overview = renderSyncOverviewSvg(params, SignalData);
+    return `<section class="sync-fragment-control sync-fragment-control--main" data-sync-control>
+      <header class="sync-fragment-control__header">
+        <span class="sync-fragment-control__title">Сквозной фрагмент</span>
+        <span class="sync-mode-toggle" role="group" aria-label="Режим окна">
+          <button type="button" class="sync-mode-toggle__btn${isManual ? "" : " is-active"}" data-sync-control-mode="auto">Авто</button>
+          <button type="button" class="sync-mode-toggle__btn${isManual ? " is-active" : ""}" data-sync-control-mode="manual">Ручной</button>
+        </span>
+      </header>
+      <div class="sync-fragment-control__fields">
+        <label class="sync-field"><span>Начало t, мс</span>
+          <input type="number" step="0.01" min="0" max="${span.toFixed(3)}" value="${tStartVal.toFixed(3)}" data-sync-control-input="timeStartMs" />
+        </label>
+        <label class="sync-field"><span>Конец t, мс</span>
+          <input type="number" step="0.01" min="0" max="${span.toFixed(3)}" value="${tEndVal.toFixed(3)}" data-sync-control-input="timeEndMs" />
+        </label>
+      </div>
+      <div class="sync-overview" aria-label="Полная реализация g(t) с подсвеченным фрагментом">
+        <span class="sync-overview__label">Полная реализация g(t)</span>
+        ${overview}
+      </div>
+      <p class="sync-fragment-control__summary">${syncInfoString()}</p>
+    </section>`;
+  }
+
+  // Локальный контроль по отсчётам k (карточки 03/04/05/09).
+  function renderSyncSamplesControl() {
+    const sync = SignalData.sync || {};
+    const sw = sync.sampleWindow || { start: 0, end: 0 };
+    const maxK = (SignalData.sampled_x_indices || []).length || 0;
+    return `<section class="sync-fragment-control sync-fragment-control--compact" data-sync-control>
+      <header class="sync-fragment-control__header">
+        <span class="sync-fragment-control__title">Сквозной фрагмент</span>
+        <span class="sync-fragment-control__summary">${syncInfoString()}</span>
+      </header>
+      <div class="sync-fragment-control__fields">
+        <label class="sync-field"><span>Отсчёт k нач</span>
+          <input type="number" step="1" min="0" max="${Math.max(0, maxK - 1)}" value="${sw.start}" data-sync-control-input="kStart" />
+        </label>
+        <label class="sync-field"><span>Отсчёт k кон</span>
+          <input type="number" step="1" min="1" max="${maxK}" value="${sw.end}" data-sync-control-input="kEnd" />
+        </label>
+      </div>
+      <p class="sync-fragment-control__hint">Те же значения по оси времени в карточке 1.</p>
+    </section>`;
+  }
+
+  // Локальный контроль по кодовым словам (карточки 06/07/08).
+  function renderSyncWordsControl() {
+    const sync = SignalData.sync || {};
+    const sw = sync.sampleWindow || { start: 0, end: 0 };
+    const maxK = (SignalData.sampled_x_indices || []).length || 0;
+    const mu = SignalData.quantization_mu || 1;
+    const autoVisible = Math.max(1, Math.floor(12 / mu));
+    const sm = getSyncManual();
+    const visN = (sm.mode === "manual" && sm.visibleWordsOverride) ? sm.visibleWordsOverride : autoVisible;
+    const bwv = sync.bitWindowView || { start: 0, end: 0 };
+    const opts = [1, 2, 3].map((n) => `<option value="${n}"${n === visN ? " selected" : ""}>${n}</option>`).join("");
+    return `<section class="sync-fragment-control sync-fragment-control--compact" data-sync-control>
+      <header class="sync-fragment-control__header">
+        <span class="sync-fragment-control__title">Сквозной фрагмент</span>
+        <span class="sync-fragment-control__summary">${syncInfoString()}</span>
+      </header>
+      <div class="sync-fragment-control__fields">
+        <label class="sync-field"><span>Начальное слово k</span>
+          <input type="number" step="1" min="0" max="${Math.max(0, maxK - 1)}" value="${sw.start}" data-sync-control-input="wordStartK" />
+        </label>
+        <label class="sync-field"><span>Показать слов</span>
+          <select data-sync-control-input="visibleWords">${opts}</select>
+        </label>
+      </div>
+      <p class="sync-fragment-control__hint">Биты r = ${bwv.start}…${bwv.end}. Управление идёт целыми кодовыми словами.</p>
+    </section>`;
+  }
+
+  // Информационный блок без полей (например, для карточки 2).
+  function renderSyncInfoOnly() {
+    return `<section class="sync-fragment-control sync-fragment-control--compact" data-sync-control>
+      <header class="sync-fragment-control__header">
+        <span class="sync-fragment-control__title">Сквозной фрагмент</span>
+        <span class="sync-fragment-control__summary">${syncInfoString()}</span>
+      </header>
+    </section>`;
+  }
+
+  // Возвращает HTML контроля для данного этапа или пустую строку.
+  function renderSyncControl(stageId, params, SignalData) {
+    const kind = syncControlKind(stageId);
+    if (!kind) return "";
+    if (kind === "main") return renderSyncMainControl(params, SignalData);
+    if (kind === "info") return renderSyncInfoOnly();
+    if (kind === "samples") return renderSyncSamplesControl();
+    if (kind === "words") return renderSyncWordsControl();
+    return "";
+  }
+
+  // Обработчик событий от контролов фрагмента.
+  function handleSyncControlChange(event) {
+    const target = event.target;
+    const mode = target.dataset.syncControlMode;
+    const inputKey = target.dataset.syncControlInput;
+    if (!mode && !inputKey) return;
+
+    // Кнопка режима
+    if (mode === "auto") {
+      applySyncChange((sm) => { sm.mode = "auto"; sm.visibleWordsOverride = null; });
+      return;
+    }
+    if (mode === "manual") {
+      // Резервное заполнение значений из текущего sync.timeWindow, если поля пусты.
+      applySyncChange((sm) => {
+        sm.mode = "manual";
+        if (!Number.isFinite(sm.timeStartMs) || !Number.isFinite(sm.timeEndMs)) {
+          const cur = currentSyncTimeWindowMs();
+          sm.timeStartMs = sm.timeStartMs != null ? sm.timeStartMs : cur.start;
+          sm.timeEndMs = sm.timeEndMs != null ? sm.timeEndMs : cur.end;
+        }
+      });
+      return;
+    }
+
+    // Ввод значений — автоматически переключаемся в ручной режим.
+    if (inputKey) {
+      const vm = window.VisualMath;
+      const N = SignalData.N || (SignalData.g_t || []).length;
+      const indices = SignalData.sampled_x_indices || [];
+      const value = target.value;
+
+      if (inputKey === "timeStartMs" || inputKey === "timeEndMs") {
+        const v = parseFloat(value);
+        if (!Number.isFinite(v)) return;
+        applySyncChange((sm) => {
+          sm.mode = "manual";
+          if (inputKey === "timeStartMs") sm.timeStartMs = v;
+          else sm.timeEndMs = v;
+          // Нормализуем: start ≤ end
+          if (Number.isFinite(sm.timeStartMs) && Number.isFinite(sm.timeEndMs) && sm.timeStartMs > sm.timeEndMs) {
+            const tmp = sm.timeStartMs; sm.timeStartMs = sm.timeEndMs; sm.timeEndMs = tmp;
+          }
+        });
+      } else if (inputKey === "kStart" || inputKey === "kEnd") {
+        const k = parseInt(value, 10);
+        if (!Number.isFinite(k)) return;
+        applySyncChange((sm) => {
+          sm.mode = "manual";
+          // Берём другой конец из текущего sampleWindow.
+          const sw = (SignalData.sync && SignalData.sync.sampleWindow) || { start: 0, end: indices.length };
+          let kStart = (inputKey === "kStart") ? k : sw.start;
+          let kEnd = (inputKey === "kEnd") ? k : sw.end;
+          if (kStart < 0) kStart = 0;
+          if (kEnd > indices.length) kEnd = indices.length;
+          if (kEnd <= kStart) kEnd = kStart + 1;
+          const idxStart = indices[kStart] != null ? indices[kStart] : 0;
+          const idxEnd = indices[kEnd] != null ? indices[kEnd] : (SignalData.N || (SignalData.g_t || []).length);
+          const paramsLocal = getParameters();
+          sm.timeStartMs = vm.indexToTimeMs(Math.min(N - 1, idxStart), N, paramsLocal);
+          sm.timeEndMs = vm.indexToTimeMs(Math.min(N, idxEnd), N, paramsLocal);
+        });
+      } else if (inputKey === "wordStartK" || inputKey === "visibleWords") {
+        let wordStartK = null, visN = null;
+        if (inputKey === "wordStartK") wordStartK = parseInt(value, 10);
+        if (inputKey === "visibleWords") visN = parseInt(value, 10);
+        applySyncChange((sm) => {
+          sm.mode = "manual";
+          const sw = (SignalData.sync && SignalData.sync.sampleWindow) || { start: 0, end: indices.length };
+          const wsK = (wordStartK != null) ? wordStartK : sw.start;
+          const n = (visN != null) ? visN : (sm.visibleWordsOverride || Math.max(1, Math.floor(12 / (SignalData.quantization_mu || 1))));
+          sm.visibleWordsOverride = Math.max(1, Math.min(3, n));
+          const kStart = Math.max(0, Math.min(indices.length - 1, wsK));
+          const kEnd = Math.min(indices.length, kStart + sm.visibleWordsOverride);
+          const idxStart = indices[kStart] != null ? indices[kStart] : 0;
+          const idxEnd = indices[kEnd] != null ? indices[kEnd] : (SignalData.N || (SignalData.g_t || []).length);
+          const paramsLocal = getParameters();
+          sm.timeStartMs = vm.indexToTimeMs(Math.min(N - 1, idxStart), N, paramsLocal);
+          sm.timeEndMs = vm.indexToTimeMs(Math.min(N, idxEnd), N, paramsLocal);
+        });
+      }
+    }
   }
 
   // Рендер панели этапа
@@ -1054,6 +1369,8 @@ if (v < responseMin) responseMin = v;
     if (handler && handler.renderSVG) {
       svgContent = handler.renderSVG(stage.id, params, helpers, SignalData);
     }
+    // Контрол сквозного фрагмента — добавляется над visuals.
+    const syncControlHtml = renderSyncControl(stage.id, params, SignalData);
 
     // Формируем HTML
     let html = `<div class="stage-panel__left">`;
@@ -1086,7 +1403,7 @@ if (v < responseMin) responseMin = v;
     html += `</div>`;
 
     if (svgContent) {
-      html += `<div class="stage-panel__visuals">${svgContent}</div>`;
+      html += `<div class="stage-panel__visuals">${syncControlHtml}<div class="stage-panel__visuals-content" data-sync-svg-host>${svgContent}</div></div>`;
     } else {
       html += `<div class="stage-panel__placeholder"><div><strong>Область будущей визуализации</strong><p>Здесь появится график изменения сигнала на выбранном этапе.</p></div></div>`;
     }
@@ -1326,12 +1643,15 @@ if (v < responseMin) responseMin = v;
     renderMath();
   }
 
-  function handleParametersChange(event) {
+function handleParametersChange(event) {
     if (event.target.name === "variantPreset") { applyVariant(event.target.value); return; }
     if (!isApplyingVariant) variantPreset.value = "custom";
     if (["modulation", "reception"].includes(event.target.name)) SignalData.lastParamsString = null;
     if (event.target.name === "modulation") updateConditionalFields();
     if (["beta", "bandwidthFactor"].includes(event.target.name)) updateDerivedFields();
+    // При изменении физических параметров сбрасываем ручной выбор фрагмента в авто,
+    // чтобы окно пересчиталось под новую реализацию g(t).
+    if (SignalData.syncManual) { SignalData.syncManual.mode = "auto"; SignalData.syncManual.visibleWordsOverride = null; }
     // Запоминаем изменённый параметр для подсветки зависимостей
     if (!isApplyingVariant && event.target.name) {
       lastChangedParam = event.target.name;
@@ -1389,6 +1709,9 @@ if (v < responseMin) responseMin = v;
     parametersForm.addEventListener("change", handleParametersChange);
     panel.addEventListener("input", handleStageControlChange);
     panel.addEventListener("change", handleStageControlChange);
+    panel.addEventListener("input", handleSyncControlChange);
+    panel.addEventListener("change", handleSyncControlChange);
+    panel.addEventListener("click", handleSyncControlChange);
     window.addEventListener("load", renderMath);
   }
 
