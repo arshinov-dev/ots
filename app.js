@@ -1456,22 +1456,23 @@ SignalData.lastParamsString = paramsSignature;
     }, 100);
   }
 
-  const structuralSchemeNodes = [
-    { stageId: "source", group: "source", short: "ИС", label: "Источник сообщения", signal: "c(t)" },
-    { stageId: "source", group: "source", short: "ПП", label: "Первичный преобразователь", signal: "g(t)" },
-    { stageId: "tx-filter", group: "tx", short: "ФНЧ", label: "ФНЧ передающего устройства", signal: "x(t)" },
-    { stageId: "sampler", group: "tx", short: "АЦП", label: "Дискретизатор", signal: "x(kΔt)" },
-    { stageId: "quantizer", group: "tx", short: "АЦП", label: "Квантователь", signal: "vₖʲ" },
-    { stageId: "encoder", group: "tx", short: "Кодер", label: "Кодер АЦП", signal: "bₖᵘ" },
-    { stageId: "modulator", group: "tx", short: "Модулятор", label: "Модулятор", signal: "S(t)" },
-    { stageId: "channel", group: "channel", short: "НКС", label: "Непрерывный канал связи", signal: "z(t)" },
-    { stageId: "detector", group: "rx", short: "ПРУ", label: "Входное устройство приёмника", signal: "ŝ(t)" },
-    { stageId: "detector", group: "rx", short: "Детектор", label: "Детектор и решающее устройство", signal: "b̂ₖᵘ" },
-    { stageId: "decoder", group: "rx", short: "Декодер", label: "Декодер ЦАП", signal: "v̂ₖʲ" },
-    { stageId: "decoder", group: "rx", short: "ЦАП", label: "Интерполятор ЦАП", signal: "x̂(t)" },
-    { stageId: "recipient", group: "rx", short: "ФНЧ", label: "ФНЧ приёмного устройства", signal: "ĝ(t)" },
-    { stageId: "recipient", group: "rx", short: "Получатель", label: "Выходной преобразователь и получатель", signal: "ĉ(t)" },
-  ];
+  const structuralSchemeNodes = {
+    source:   { stageId: "source",     group: "source",  short: "ИС",        label: "Источник сообщения",            signal: "c(t)" },
+    pp:       { stageId: "source",     group: "source",  short: "ПП",        label: "Первичный преобразователь",      signal: "g(t)" },
+    txFilter:  { stageId: "tx-filter",  group: "tx",      short: "ФНЧ",       label: "ФНЧ передающего устройства",      signal: "x(t)" },
+    sampler:  { stageId: "sampler",    group: "tx",      short: "Дискр.",    label: "Дискретизатор",                  signal: "x(kΔt)", sideInput: { short: "Ген.", label: "Генератор δ(t)" } },
+    quantizer:{ stageId: "quantizer",  group: "tx",      short: "Квант.",     label: "Квантователь",                   signal: "vₖʲ" },
+    encoder:  { stageId: "encoder",    group: "tx",      short: "Кодер",     label: "Кодер АЦП",                      signal: "bₖᵘ" },
+    modulator:{ stageId: "modulator",  group: "tx",      short: "Модулятор", label: "Модулятор",                      signal: "S(t)", sideInput: { short: "Ген.", label: "Генератор несущей", signal: "uн(t)" } },
+    pdu:      { stageId: "modulator",  group: "tx",      short: "ПДУ",       label: "Выходное устройство ПДУ",        signal: "S(t)" },
+    channel:  { stageId: "channel",    group: "channel", short: "НКС",       label: "Линия связи (непрерывный канал)", signal: "z(t)", sideInput: { short: "ИП", label: "Источник помех", signal: "n(t)" } },
+    pru:      { stageId: "detector",   group: "rx",      short: "ПРУ",       label: "Входное устройство приёмника",   signal: "ŝ(t)" },
+    detector: { stageId: "detector",   group: "rx",      short: "Детектор",  label: "Детектор и решающее устройство", signal: "b̂ₖᵘ" },
+    decoder:  { stageId: "decoder",    group: "rx",      short: "Декодер",   label: "Декодер ЦАП",                    signal: "v̂ₖʲ" },
+    interpol: { stageId: "decoder",    group: "rx",      short: "Интерп.",   label: "Интерполятор ЦАП",               signal: "x̂(t)" },
+    rxFilter:  { stageId: "recipient",  group: "rx",      short: "ФНЧ",       label: "ФНЧ приёмного устройства",        signal: "ĝ(t)" },
+    recipient:{ stageId: "recipient",  group: "rx",      short: "Получатель",label: "Выходной преобразователь и получатель", signal: "ĉ(t)" },
+  };
 
   function renderStructuralScheme() {
     if (!workspaceLayout || !workspaceShell) return;
@@ -1488,14 +1489,12 @@ SignalData.lastParamsString = paramsSignature;
         <span data-group="rx"><i></i>Приём и ЦАП</span>
       </div>
       <div class="spi-structure__scroll" aria-label="Структурная схема">
-        <div class="spi-structure__lanes">
-          <div class="spi-structure__track spi-structure__track--forward" role="list"></div>
-          <div class="spi-structure__turn" aria-hidden="true"><span>\(z(t)\)</span><i>↓</i></div>
-          <div class="spi-structure__track spi-structure__track--return" role="list"></div>
-        </div>
+        <div class="spi-structure__canvas" role="list"></div>
       </div>
       <p class="spi-structure__hint">Нажмите на блок, чтобы перейти к его карточке. Подсвеченные блоки соответствуют выбранному этапу.</p>
     </div>`;
+
+    const canvas = structuralScheme.querySelector(".spi-structure__canvas");
 
     const createNode = (node) => {
       const block = document.createElement("button");
@@ -1505,32 +1504,104 @@ SignalData.lastParamsString = paramsSignature;
       block.dataset.group = node.group;
       block.setAttribute("role", "listitem");
       block.setAttribute("aria-label", `${node.label}. Открыть этап.`);
-      block.innerHTML = `<span class="spi-node__short">${node.short}</span><span class="spi-node__label">${node.label}</span>`;
+      block.innerHTML = `<span class="spi-node__label">${node.label}</span>`;
       block.addEventListener("click", () => selectStage(node.stageId));
       return block;
     };
 
-    const createConnector = (signal, arrow) => {
+    const createAuxNode = (node, side) => {
+      const block = document.createElement("button");
+      block.type = "button";
+      block.className = "spi-node spi-node--aux";
+      block.dataset.stageId = node.stageId;
+      block.dataset.group = node.group;
+      block.setAttribute("aria-label", `${side.label}. Входной сигнал.`);
+      block.innerHTML = `<span class="spi-node__label">${side.label}</span>`;
+      block.addEventListener("click", () => selectStage(node.stageId));
+      return block;
+    };
+
+    const createConnector = (signal, arrow, vertical) => {
       const connector = document.createElement("span");
-      connector.className = "spi-connector";
+      connector.className = "spi-connector" + (vertical ? " spi-connector--vertical" : "");
       connector.setAttribute("aria-hidden", "true");
-      connector.innerHTML = `<span>${signal}</span><i>${arrow}</i>`;
+      connector.innerHTML = `<span>${signal || ""}</span><i>${arrow}</i>`;
       return connector;
     };
 
-    const forwardTrack = structuralScheme.querySelector(".spi-structure__track--forward");
-    const forwardNodes = structuralSchemeNodes.slice(0, 8);
-    forwardNodes.forEach((node, index) => {
-      forwardTrack.append(createNode(node));
-      if (index < forwardNodes.length - 1) forwardTrack.append(createConnector(node.signal, "→"));
-    });
+    const createSideStack = (node) => {
+      const stack = document.createElement("div");
+      stack.className = "spi-node-stack";
+      stack.append(createAuxNode(node, node.sideInput));
+      stack.append(createConnector(node.sideInput.signal, "↓", true));
+      stack.append(createNode(node));
+      return stack;
+    };
 
-    const returnTrack = structuralScheme.querySelector(".spi-structure__track--return");
-    const returnNodes = structuralSchemeNodes.slice(8).reverse();
-    returnNodes.forEach((node, index) => {
-      returnTrack.append(createNode(node));
-      if (index < returnNodes.length - 1) returnTrack.append(createConnector(returnNodes[index + 1].signal, "←"));
-    });
+    const createGroupBox = (nodes, key, label, rtl) => {
+      const groupClass = key === "tx-adc" ? "spi-group-box spi-group-box--tx"
+                       : key === "rx-dac" ? "spi-group-box spi-group-box--rx"
+                       : "spi-group-box";
+      const group = document.createElement("div");
+      group.className = groupClass;
+      group.dataset.group = nodes[0].group;
+      if (label) {
+        const lbl = document.createElement("span");
+        lbl.className = "spi-group-box__label";
+        lbl.textContent = label;
+        group.append(lbl);
+      }
+      const inner = document.createElement("div");
+      inner.className = "spi-group-box__inner";
+      const ordered = rtl ? nodes.slice().reverse() : nodes;
+      ordered.forEach((n, i) => {
+        inner.append(n.sideInput ? createSideStack(n) : createNode(n));
+        if (i < ordered.length - 1) inner.append(createConnector(ordered[i].signal, rtl ? "←" : "→"));
+      });
+      group.append(inner);
+      return group;
+    };
+
+    const place = (el, row, col, rowSpan, colSpan) => {
+      el.style.gridRow = `${row} / span ${rowSpan || 1}`;
+      el.style.gridColumn = `${col} / span ${colSpan || 1}`;
+      canvas.append(el);
+    };
+
+    const n = structuralSchemeNodes;
+
+    // Верхняя ветвь (строка 1): ИС → ПП → ФНЧ → [АЦП] → Модулятор → ПДУ
+    place(createNode(n.source), 1, 1);
+    place(createConnector(n.source.signal, "→"), 1, 2);
+    place(createNode(n.pp), 1, 3);
+    place(createConnector(n.pp.signal, "→"), 1, 4);
+    place(createNode(n.txFilter), 1, 5);
+    place(createConnector(n.txFilter.signal, "→"), 1, 6);
+    place(createGroupBox([n.sampler, n.quantizer, n.encoder], "tx-adc", "АЦП", false), 1, 7, 1, 4);
+    place(createConnector(n.encoder.signal, "→"), 1, 11);
+    place(n.modulator.sideInput ? createSideStack(n.modulator) : createNode(n.modulator), 1, 12);
+    place(createConnector(n.modulator.signal, "→"), 1, 13);
+    place(createNode(n.pdu), 1, 14);
+
+    // Вертикальный канал справа (столбец 14): ПДУ ↓ S(t) НКС ↓ z(t) ПРУ
+    place(createConnector("S(t)", "↓", true), 2, 14);
+    place(createNode(n.channel), 3, 14);
+    place(createConnector("z(t)", "↓", true), 4, 14);
+    place(createNode(n.pru), 5, 14);
+
+    // Источник помех ИП (строка 3): НКС ← n(t) ← ИП
+    place(createConnector(n.channel.sideInput.signal, "←"), 3, 15);
+    place(createAuxNode(n.channel, n.channel.sideInput), 3, 16);
+
+    // Нижняя ветвь (строка 5): Получатель ← ФНЧ ← [ЦАП] ← Детектор ← ПРУ
+    place(createNode(n.recipient), 5, 3);
+    place(createConnector(n.rxFilter.signal, "←"), 5, 4);
+    place(createNode(n.rxFilter), 5, 5);
+    place(createConnector(n.interpol.signal, "←"), 5, 6);
+    place(createGroupBox([n.interpol, n.decoder], "rx-dac", "ЦАП", true), 5, 7, 1, 4);
+    place(createConnector(n.detector.signal, "←"), 5, 11);
+    place(createNode(n.detector), 5, 12);
+    place(createConnector(n.pru.signal, "←"), 5, 13);
 
     workspaceShell.insertBefore(structuralScheme, workspaceLayout);
   }
