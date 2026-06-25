@@ -502,8 +502,6 @@
       const dfg = calculation.input.dfg;
       const sigmaG = Math.sqrt(Pg);
       const values = SignalData.g_t;
-      const sampleMean = values.reduce((sum, value) => sum + value, 0) / values.length;
-      const sampleVariance = values.reduce((sum, value) => sum + Math.pow(value - sampleMean, 2), 0) / values.length;
 
       const tw = (SignalData.sync && SignalData.sync.timeWindow) || { start: 0, end: SignalData.g_t.length };
       const dynStart = tw.start;
@@ -590,19 +588,6 @@
       });
       histogramSvg += `</svg>`;
 
-      const synthesisBlock = `<section class="source-synthesis" aria-labelledby="source-synthesis-title">
-        <h3 id="source-synthesis-title">Как построена реализация \\(g(t)\\)</h3>
-        <p><strong>Это не независимый белый шум, нарисованный по точкам.</strong> На графике показана синтезированная реализация стационарного гауссовского случайного процесса.</p>
-        <ol>
-          <li>По заданной корреляционной функции \\(B_c(\\tau)\\) через преобразование Винера–Хинчина задаётся спектральная плотность \\(G_g(f)\\).</li>
-          <li>По \\(G_g(f)\\) выбираются 96 гармонических компонент: \\(f_m=(m+\\tfrac12)\\Delta f\\), \\(A_m=\\sqrt{2G_g(f_m)\\Delta f}\\), фазы \\(\\varphi_m\\) фиксируются для текущего набора параметров.</li>
-          <li>Компоненты суммируются на общей временной сетке: \\(g_0(t_i)=\\sum_{m=0}^{95}A_m\\cos(2\\pi f_m t_i+\\varphi_m)\\). Это же временное окно используется в сквозных графиках тракта.</li>
-          <li>Полученная реализация центрируется: \\(M_0=\\frac1N\\sum_i g_0(t_i)\\), \\(g_c(t_i)=g_0(t_i)-M_0\\), поэтому \\(M\{g(t)\}=0\\).</li>
-          <li>Реализация масштабируется: \\(D_0=\\frac1N\\sum_i g_c^2(t_i)\\), \\(g(t_i)=\\sqrt{P_g/D_0}\\,g_c(t_i)\\). В результате \\(D_g=P_g\\), \\(\\sigma_g=\\sqrt{P_g}\\).</li>
-        </ol>
-        <p class="source-synthesis__bandwidth">Рабочая полоса задаётся как \\(\\Delta f_g=k\\beta=${dfg.toFixed(2)}\\text{ кГц}\\). Параметр \\(\\beta\\) меняет форму \\(B_c(\\tau)\\), \\(G_g(f)\\) и амплитуды гармоник; \\(k\\) задаёт эффективную полосу, используемую далее и при выборе спектрального окна синтеза.</p>
-        <div class="source-stat-check"><strong>Проверка реализации:</strong><span>\\(M_{\\text{выб}}\{g\}=${sampleMean.toFixed(4)}\\text{ В}\\)</span><span>\\(D_{\\text{выб}}\{g\}=${sampleVariance.toFixed(4)}\\text{ В}^2\\)</span><span>задано: \\(M\{g\}=0\\), \\(D_g=P_g=${Pg.toFixed(4)}\\text{ В}^2\\)</span></div>
-      </section>`;
       const timeScale = `<dl class="visual-scale"><div><dt>Среднее</dt><dd>\\(M\{g\}=0\\) В</dd></div><div><dt>СКО</dt><dd>\\(\\sigma_g=${sigmaG.toFixed(3)}\\) В</dd></div><div><dt>Окно</dt><dd>${(timeEnd - timeStart).toFixed(3)} мс</dd></div></dl>`;
       const corrScale = `<dl class="visual-scale"><div><dt>В нуле</dt><dd>\\(B_c(0)=P_g=${Pg.toFixed(3)}\\) В²</dd></div><div><dt>Параметр формы</dt><dd>\\(\\beta=${beta.toFixed(2)}\\) мс⁻¹</dd></div><div><dt>Диапазон</dt><dd>±${tauMax.toFixed(3)} мс</dd></div></dl>`;
       const spectrumScale = `<dl class="visual-scale"><div><dt>Полоса</dt><dd>\\(\\Delta f_g=${dfg.toFixed(2)}\\) кГц</dd></div><div><dt>Распределение</dt><dd>\\(G_g(f)\\), В²/кГц</dd></div></dl>`;
@@ -611,7 +596,6 @@
       const caption = (shown, next, note = "") => `<div class="stage-visual-caption"><p><strong>Показывает:</strong> ${shown}</p><p><strong>Нужно дальше:</strong> ${next}</p>${note ? `<p class="stage-visual-caption__note">${note}</p>` : ""}</div>`;
 
       return `<div class="stage-panel__visuals-stack">
-        ${synthesisBlock}
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">1. Временная реализация \\(g(t)\\)</p>${timeScale}${timeSvg}${caption("одну синтезированную реализацию случайного процесса \\(g(t)\\).", "этот же сигнал проходит через ФНЧ, дискретизатор, квантователь и восстановление.")}</div>
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">2. Корреляционная функция \\(B_c(\\tau)\\)</p>${corrScale}${corrSvg}${caption("как быстро значения процесса теряют связь при увеличении \\(\\tau\\).", "форма \\(B_c(\\tau)\\) задаёт спектральную плотность \\(G_g(f)\\).")}</div>
         <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">3. Спектральная плотность \\(G_g(f)\\)</p>${spectrumScale}${spectrumSvg}${caption("как мощность процесса распределена по частотам.", "по \\(G_g(f)\\) выбираются гармонические компоненты и определяется рабочая полоса \\(\\Delta f_g\\).")}</div>

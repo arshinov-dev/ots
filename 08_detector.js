@@ -182,7 +182,7 @@
     if (mod === "DCHM") {
       return `<div class="stage-panel__info-box decision-rule-box">
         <strong>Правило РУ (ДЧМ):</strong>
-        <span>РУ сравнивает два отклика \\(U_{1,k}\\) и \\(U_{2,k}\\). Принимается тот символ, чей канал дал больший отклик.</span>
+        <span>РУ сравнивает уровни сигналов \\(U_{1,k}\\) и \\(U_{2,k}\\). Принимается тот символ, чей сигнал оказался сильнее.</span>
         <span class="decision-rule-formula">\\( \\hat b_k = \\begin{cases} 1, & U_{2,k} > U_{1,k} \\\\ 0, & U_{2,k} \\le U_{1,k} \\end{cases} \\)</span>
       </div>`;
     }
@@ -383,36 +383,63 @@
       const decisionRuleBlock = buildDecisionRuleBlock(params, u0_val);
 
       // --- Главный график решения: отклики / порог / стробы / биты ---
-      const decisionH = 260;
+      const decisionH = 300;
+      const bitBandTop = decisionH - 76;
+      const bitBandBottom = decisionH - 16;
+      const bitHighY = bitBandTop + 16;
+      const bitLowY = bitBandBottom - 16;
       const traces = SignalData.detectorTrace.slice(zoom.start, zoom.end);
       const rAxis = sync.responseAxis || {};
       const rMax = Math.max(1e-6, Math.abs(rAxis.responseMax || 0), Math.abs(rAxis.responseMin || 0), Math.abs(u0_val), SignalData.Um || 0);
       const maxDecision = rMax;
-      const decisionY = (value) => decisionH / 2 - (value / maxDecision) * (decisionH * 0.32);
+      const decisionMidY = 112;
+      const decisionY = (value) => decisionMidY - (value / maxDecision) * 78;
       const stepX = W / Math.max(1, traces.length);
       const barW = stepX * 0.5;
       let decisionSvg = `<svg viewBox="0 0 ${W} ${decisionH}" width="100%" height="auto" class="stage-panel__visuals-svg">`;
       decisionSvg += window.VisualMath.axes(W, decisionH, decisionY(0), "k", "U_k");
       decisionSvg += `<line x1="0" y1="${decisionY(u0_val)}" x2="${W}" y2="${decisionY(u0_val)}" stroke="#e74c3c" stroke-width="2.2" stroke-dasharray="6,6" />`;
       decisionSvg += `<text x="${W - 10}" y="${decisionY(u0_val) - 6}" fill="#e74c3c" font-family="monospace" font-size="12" text-anchor="end">U0=${u0_val.toFixed(4)} В</text>`;
+      decisionSvg += `<rect x="1" y="${bitBandTop}" width="${W - 2}" height="${bitBandBottom - bitBandTop}" rx="8" fill="#f6f8f7" stroke="#d5ddd8" stroke-width="1" />
+        <line x1="8" y1="${bitHighY}" x2="${W - 8}" y2="${bitHighY}" stroke="#d5ddd8" stroke-width="1" stroke-dasharray="4,6" />
+        <line x1="8" y1="${bitLowY}" x2="${W - 8}" y2="${bitLowY}" stroke="#d5ddd8" stroke-width="1" stroke-dasharray="4,6" />
+        <text x="20" y="${bitBandTop + 18}" fill="#31433b" font-family="monospace" font-size="13" font-weight="bold">b̂</text>`;
+      let bitPath = "";
       traces.forEach((trace, index) => {
         const x = (index + 0.5) * stepX;
+        const x1 = index * stepX;
+        const x2 = (index + 1) * stepX;
         const y = decisionY(trace.val);
         const y0 = decisionY(0);
         const bitLabel = trace.bit > 0 ? "1" : "0";
         const originalLabel = trace.originalBit > 0 ? "1" : "0";
         // строб — вертикальная линия
-        decisionSvg += `<line x1="${x}" y1="18" x2="${x}" y2="${decisionH - 34}" stroke="rgba(98,113,107,0.22)" stroke-dasharray="3,6" />`;
+        decisionSvg += `<line x1="${x}" y1="18" x2="${x}" y2="${bitBandTop - 8}" stroke="rgba(98,113,107,0.22)" stroke-dasharray="3,6" />`;
         // столбец отклика
         decisionSvg += `<rect x="${x - barW / 2}" y="${Math.min(y, y0)}" width="${barW}" height="${Math.max(2, Math.abs(y - y0))}" fill="${trace.error ? "#e74c3c" : "#0c6b4f"}" fill-opacity="0.72" />`;
         decisionSvg += `<circle cx="${x}" cy="${y}" r="4.2" fill="${trace.error ? "#e74c3c" : "#0c6b4f"}" stroke="#ffffff" stroke-width="1.4" />`;
-        // принятый бит
-        decisionSvg += `<text x="${x}" y="${decisionH - 14}" fill="${trace.error ? "#e74c3c" : "#0c6b4f"}" font-family="monospace" font-size="14" text-anchor="middle" font-weight="bold">b̂=${bitLabel}${trace.error ? ` (${originalLabel})` : ""}</text>`;
+        if (trace.error) {
+          decisionSvg += `<rect x="${x1 + 2}" y="${bitBandTop + 3}" width="${Math.max(2, stepX - 4)}" height="${bitBandBottom - bitBandTop - 6}" rx="5" fill="#e74c3c" fill-opacity="0.09" />`;
+        }
+        const bitY = trace.bit > 0 ? bitHighY : bitLowY;
+        if (index === 0) {
+          bitPath += `M ${x1} ${bitY} `;
+        } else {
+          const prevY = traces[index - 1].bit > 0 ? bitHighY : bitLowY;
+          if (prevY !== bitY) bitPath += `L ${x1} ${prevY} L ${x1} ${bitY} `;
+        }
+        bitPath += `L ${x2} ${bitY} `;
+        const labelY = trace.bit > 0 ? bitHighY - 7 : bitLowY + 17;
+        decisionSvg += `<text x="${x}" y="${labelY}" fill="${trace.error ? "#e74c3c" : "#1f2b26"}" font-family="monospace" font-size="13" text-anchor="middle" font-weight="bold">${bitLabel}</text>`;
         if (trace.error) {
           decisionSvg += `<line x1="${x - 7}" y1="${y - 12}" x2="${x + 7}" y2="${y + 2}" stroke="#e74c3c" stroke-width="2.4" stroke-linecap="round" />
             <line x1="${x + 7}" y1="${y - 12}" x2="${x - 7}" y2="${y + 2}" stroke="#e74c3c" stroke-width="2.4" stroke-linecap="round" />`;
+          decisionSvg += `<text x="${x}" y="${bitBandBottom - 5}" fill="#e74c3c" font-family="monospace" font-size="10" text-anchor="middle">b=${originalLabel}</text>`;
         }
       });
+      if (bitPath) {
+        decisionSvg += `<path d="${bitPath}" stroke="#1f2b26" stroke-width="2.6" fill="none" stroke-linejoin="miter" />`;
+      }
       decisionSvg += `</svg>`;
 
       const errorsInWindow = traces.filter((trace) => trace.error).length;
@@ -476,7 +503,7 @@
 
       return `<div class="stage-panel__visuals-stack">
         ${schemeLayer}
-        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">\\(z(t)\\) → отклик → строб → сравнение → \\(\\hat b_k^\\mu\\)</p>${decisionRuleBlock}${decisionScale}${decisionSvg}<p class="stage-panel__info-box">Приёмник не угадывает бит: решение получается из отсчёта отклика в момент стробирования.</p></div>
+        <div class="stage-panel__visuals-layer"><p class="stage-panel__visuals-header">\\(z(t)\\) → отклик → строб → сравнение → \\(\\hat b_k^\\mu\\)</p>${decisionRuleBlock}${decisionScale}${decisionSvg}<p class="stage-panel__info-box">Приёмник решает, какой бит пришёл, просто считывая уровень сигнала в строго нужный момент.</p></div>
         <div class="stage-panel__visuals-layer">${pdfDetails}</div>
         <div class="stage-panel__visuals-layer">${planeDetails}</div>
       </div>`;
