@@ -51,7 +51,7 @@
       output: `последовательность ${formula(String.raw`x(k\Delta t)`)}`,
       points: [
         `Чем больше ${formula(String.raw`\alpha`)}, тем плотнее стоят отсчёты.`,
-        `Этот же шаг ${formula(String.raw`\Delta t`)} дальше задаёт длительность ступеней ЦАП, поэтому дискретизация связывает начало и конец тракта.`,
+        `Этот же шаг ${formula(String.raw`\Delta t`)} дальше задаёт длительность ступеней ЦАП, поэтому дискретизация связывает начало и конец системы.`,
       ],
     },
     quantizer: {
@@ -197,7 +197,7 @@
 
   const modulationOptions = {
     DAM: { title: "ДАМ · дискретная амплитудная модуляция", description: "Двоичный код управляет амплитудой гармонической несущей.", primaryFrequencyLabel: formula(String.raw`f_0`), primaryFrequencyDescription: "Несущая частота, МГц", receptions: [["KO", "КО · когерентный приём"], ["NO", "НО · некогерентный приём"]] },
-    DCHM: { title: "ДЧМ · дискретная частотная модуляция", description: `Двоичный код переключает несущую между частотами ${formula(String.raw`f_1`)} и ${formula(String.raw`f_2`)}.`, primaryFrequencyLabel: formula(String.raw`f_2`), primaryFrequencyDescription: "Нижняя несущая частота, МГц", receptions: [["KO", "КО · когерентный приём"], ["NO", "НО · некогерентный приём"]] },
+    DCHM: { title: "ДЧМ · дискретная частотная модуляция", description: "Двоичный код переключает несущую между частотами f₁ и f₂.", primaryFrequencyLabel: formula(String.raw`f_2`), primaryFrequencyDescription: "Нижняя несущая частота, МГц", receptions: [["KO", "КО · когерентный приём"], ["NO", "НО · некогерентный приём"]] },
     DOFM: { title: "ДОФМ · дискретная относительная фазовая модуляция", description: "Двоичный код управляет относительным изменением фазы несущей.", primaryFrequencyLabel: formula(String.raw`f_0`), primaryFrequencyDescription: "Несущая частота, МГц", receptions: [["SF", "СФ · сравнение фаз"], ["SP", "СП · сравнение полярностей"]] },
   };
 
@@ -538,14 +538,15 @@
       Dg: formula(String.raw`D_g`), deltaU1: formula(String.raw`\Delta u_1`),
     };
     const formatParam = (p) => paramLabels[p] || escapeHtml(p);
-    let html = `<div class="dependencies-block">`;
+    let html = `<details class="dependencies-block">`;
+    html += `<summary>Параметры этапа</summary>`;
     if (dependsOn.length) {
       html += `<div class="dependencies-row"><span class="dependencies-label">Зависит от:</span><span class="dependencies-values">${dependsOn.map(formatParam).join(", ")}</span></div>`;
     }
     if (affects.length) {
       html += `<div class="dependencies-row"><span class="dependencies-label">Влияет на:</span><span class="dependencies-values">${affects.map(formatParam).join(", ")}</span></div>`;
     }
-    html += `</div>`;
+    html += `</details>`;
     return html;
   }
 
@@ -553,7 +554,7 @@
   function renderChangeNote(changedParam) {
     const note = PARAM_CHANGE_NOTES[changedParam];
     if (!note) return "";
-    return `<div class="change-note">${escapeHtml(note)}</div>`;
+    return `<div class="change-note">${note}</div>`;
   }
 
   function renderLearningGuide(stage, params) {
@@ -561,7 +562,7 @@
     if (!guide) return "";
     const modulationNote = ["modulator", "detector"].includes(stage.id) ? getModulationLearningNote(params) : "";
     return `<div class="stage-panel__content stage-panel__guide" data-group="${stage.group}">
-      <p class="stage-panel__action"><strong>Что изменилось:</strong> ${guide.action}</p>
+      <p class="stage-panel__action"><strong>На этом этапе:</strong> ${guide.action}</p>
       ${modulationNote ? `<p class="stage-panel__guide-note">${modulationNote}</p>` : ""}
     </div>`;
   }
@@ -570,7 +571,7 @@
     const bridge = stageBridges[stageId];
     if (!bridge) return "";
     return `<div class="stage-panel__content stage-causal-bridge">
-      <strong>Этот график нужен дальше, потому что:</strong>
+      <strong>Куда это идёт дальше:</strong>
       <span class="stage-causal-bridge__chain">${bridge.chain}</span>
       <span>${bridge.text}</span>
     </div>`;
@@ -1458,12 +1459,12 @@ SignalData.lastParamsString = paramsSignature;
 
   const structuralSchemeNodes = {
     source:    { stageId: "source",    group: "source",  highlightKey: "source",    label: "Источник сообщений",             signal: SIGNAL_META.c.symbol,           variant: "terminal" },
-    pp:        { stageId: "source",    group: "source",  highlightKey: "source",    label: "Первичный преобразователь",      signal: SIGNAL_META.g.symbol },
+    pp:        { stageId: "source",    group: "tx",      highlightKey: "source",    label: "Первичный преобразователь",      signal: SIGNAL_META.g.symbol },
     txFilter:  { stageId: "tx-filter", group: "tx",      highlightKey: "tx-filter", label: "ФНЧ",                            signal: SIGNAL_META.x.symbol },
-    sampler:   { stageId: "sampler",   group: "tx",      highlightKey: "sampler",   label: "Дискретизатор",                  signal: SIGNAL_META.sampled.symbol, sideInput: { label: "Генератор δ(t)", signal: formula(String.raw`\delta(t)`) } },
+    sampler:   { stageId: "sampler",   group: "tx",      highlightKey: "sampler",   label: "Дискретизатор",                  signal: SIGNAL_META.sampled.symbol, sideInput: { label: "Генератор", signal: formula(String.raw`\delta(t)`) } },
     quantizer: { stageId: "quantizer", group: "tx",      highlightKey: "quantizer", label: "Квантователь",                   signal: SIGNAL_META.quantized.symbol },
     encoder:   { stageId: "encoder",   group: "tx",      highlightKey: "encoder",   label: "Кодер",                          signal: SIGNAL_META.encoded.symbol },
-    modulator: { stageId: "modulator", group: "tx",      highlightKey: "modulator", label: "Модулятор",                      signal: SIGNAL_META.modulated.symbol, sideInput: { label: "Генератор uн(t)", signal: SIGNAL_META.carrier.symbol } },
+    modulator: { stageId: "modulator", group: "tx",      highlightKey: "modulator", label: "Модулятор",                      signal: SIGNAL_META.modulated.symbol, sideInput: { label: "Генератор", signal: SIGNAL_META.carrier.symbol } },
     pdu:       { stageId: "modulator", group: "tx",      highlightKey: "modulator", label: "Выходное устройство ПДУ",         signal: SIGNAL_META.transmitted.symbol },
     channel:   { stageId: "channel",   group: "channel", highlightKey: "channel",   label: "Линия связи / НКС",              signal: SIGNAL_META.received.symbol, sideInput: { label: "Источник помех", signal: SIGNAL_META.noise.symbol } },
     pru:       { stageId: "detector",  group: "rx",      highlightKey: "detector",  label: "Входное устройство ПРУ",         signal: SIGNAL_META.detected.symbol },
@@ -1478,16 +1479,17 @@ SignalData.lastParamsString = paramsSignature;
   function renderStructuralScheme() {
     if (!workspaceLayout || !workspaceShell) return;
     structuralScheme = document.createElement("section");
+    structuralScheme.id = "scheme";
     structuralScheme.className = "spi-structure";
     structuralScheme.innerHTML = `<div class="spi-structure__summary">
-      <span><small>Опорная схема тракта</small><strong>Структурная схема СПИ</strong></span>
+      <span><small>Опорная схема системы</small><strong>Структурная схема СПИ</strong></span>
     </div>
     <div class="spi-structure__body">
       <div class="spi-structure__legend" aria-label="Группы структурной схемы">
         <span data-group="source"><i></i>Источник</span>
-        <span data-group="tx"><i></i>Передача и АЦП</span>
-        <span data-group="channel"><i></i>Канал связи</span>
-        <span data-group="rx"><i></i>Приём и ЦАП</span>
+        <span data-group="tx"><i></i>ПДУ</span>
+        <span data-group="channel"><i></i>НКС</span>
+        <span data-group="rx"><i></i>ПРУ</span>
       </div>
       <div class="spi-structure__scroll" aria-label="Структурная схема">
         <div class="spi-structure__canvas" role="list"></div>
@@ -1525,7 +1527,7 @@ SignalData.lastParamsString = paramsSignature;
       block.dataset.group = node.group;
       block.dataset.highlightKey = node.highlightKey;
       block.setAttribute("aria-label", `${side.label}. Входной сигнал.`);
-      block.innerHTML = `<span class="spi-node__label">${side.label}</span><span class="spi-node__signal">${side.signal || ""}</span>`;
+      block.innerHTML = `<span class="spi-node__label">${side.label}</span>`;
       block.addEventListener("click", () => selectStage(node.stageId));
       return block;
     };
@@ -1596,27 +1598,28 @@ SignalData.lastParamsString = paramsSignature;
 
     const n = structuralSchemeNodes;
 
-    place(createZone("nks", "НКС", "channel"), 3, 23, 4, 5);
-    place(createZone("pru", "ПРУ / приёмная часть", "rx"), 5, 6, 2, 19);
+    place(createZone("pdu-zone", "ПДУ", "tx"), 1, 4, 2, 21);
+    place(createZone("nks", "НКС", "channel"), 3, 22, 3, 5);
+    place(createZone("pru-zone", "ПРУ", "rx"), 5, 6, 2, 19);
 
     // Верхняя ветвь: Источник -> ПП -> ФНЧ -> АЦП -> Модулятор -> ПДУ.
     place(createNode(n.source), 2, 1, 1, 2);
     place(createConnector(n.source.signal, "→", false, { highlightKey: n.source.highlightKey, group: n.source.group }), 2, 3);
     place(createNode(n.pp), 2, 4, 1, 2);
-    place(createConnector(n.pp.signal, "→", false, { highlightKey: n.source.highlightKey, group: n.source.group }), 2, 6);
+    place(createConnector(n.pp.signal, "→", false, { highlightKey: n.source.highlightKey, group: n.pp.group }), 2, 6);
     place(createNode(n.txFilter), 2, 7, 1, 2);
     place(createConnector(n.txFilter.signal, "→", false, { highlightKey: n.txFilter.highlightKey, group: n.txFilter.group }), 2, 9);
-    place(createGroupBox([n.sampler, n.quantizer, n.encoder], "adc", "АЦП", false), 1, 11, 2, 6);
-    place(createConnector(n.encoder.signal, "→", false, { highlightKey: n.encoder.highlightKey, group: n.encoder.group }), 2, 17);
-    place(createGroupBox([n.modulator, n.pdu], "pdu", "ПДУ", false), 1, 18, 2, 6);
+    place(createGroupBox([n.sampler, n.quantizer, n.encoder], "adc", "АЦП", false), 1, 10, 2, 8);
+    place(createConnector(n.encoder.signal, "→", false, { highlightKey: n.encoder.highlightKey, group: n.encoder.group }), 2, 18);
+    place(createGroupBox([n.modulator, n.pdu], "pdu", "", false), 1, 19, 2, 6);
 
     // Правый вертикальный канал: ПДУ -> S(t) -> линия связи / НКС -> z(t) -> ПРУ.
-    place(createConnector(n.pdu.signal, "↓", true, { highlightKey: n.channel.highlightKey, group: n.channel.group }), 3, 24);
-    place(createNode(n.channel), 4, 24, 1, 2);
-    place(createConnector(n.channel.signal, "↓", true, { highlightKey: n.channel.highlightKey, group: n.channel.group }), 5, 24);
-    place(createNode(n.pru), 6, 24, 1, 2);
-    place(createConnector(n.channel.sideInput.signal, "←", false, { highlightKey: n.channel.highlightKey, group: n.channel.group, reverse: true }), 4, 26);
-    place(createAuxNode(n.channel, n.channel.sideInput), 4, 27);
+    place(createConnector(n.pdu.signal, "↓", true, { highlightKey: n.channel.highlightKey, group: n.channel.group }), 3, 23);
+    place(createNode(n.channel), 4, 23, 1, 2);
+    place(createConnector(n.channel.signal, "↓", true, { highlightKey: n.channel.highlightKey, group: n.channel.group }), 5, 23);
+    place(createNode(n.pru), 6, 23, 1, 2);
+    place(createConnector(n.channel.sideInput.signal, "←", false, { highlightKey: n.channel.highlightKey, group: n.channel.group, reverse: true }), 4, 25);
+    place(createAuxNode(n.channel, n.channel.sideInput), 4, 26);
 
     // Нижняя ветвь читается справа налево: ПРУ -> детектор -> ЦАП -> ФНЧ -> преобразователь -> получатель.
     place(createNode(n.recipient), 6, 3, 1, 2);
@@ -1625,9 +1628,9 @@ SignalData.lastParamsString = paramsSignature;
     place(createConnector(n.rxFilter.signal, "←", false, { highlightKey: n.recipient.highlightKey, group: n.recipient.group, reverse: true }), 6, 8);
     place(createNode(n.rxFilter), 6, 9, 1, 2);
     place(createConnector(n.interpol.signal, "←", false, { highlightKey: n.decoder.highlightKey, group: n.decoder.group, reverse: true }), 6, 11);
-    place(createGroupBox([n.decoder, n.interpol], "dac", "ЦАП", true), 6, 12, 1, 5);
-    place(createConnector(n.detector.signal, "←", false, { highlightKey: n.detector.highlightKey, group: n.detector.group, reverse: true }), 6, 17);
-    place(createNode(n.detector), 6, 18, 1, 3);
+    place(createGroupBox([n.decoder, n.interpol], "dac", "ЦАП", true), 6, 12, 1, 6);
+    place(createConnector(n.detector.signal, "←", false, { highlightKey: n.detector.highlightKey, group: n.detector.group, reverse: true }), 6, 18);
+    place(createNode(n.detector), 6, 19, 1, 3);
     place(createConnector(n.pru.signal, "←", false, { highlightKey: n.detector.highlightKey, group: n.detector.group, reverse: true }), 6, 22);
 
     workspaceShell.insertBefore(structuralScheme, workspaceLayout);

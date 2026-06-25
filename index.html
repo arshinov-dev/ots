@@ -48,16 +48,14 @@
           <span class="brand__mark">ОТС</span>
           <span class="brand__text">
             <strong>Система передачи информации</strong>
-            <small>Курсовая работа · интерактивная визуализация</small>
+            <small>от источника до получателя</small>
           </span>
         </a>
 
         <nav class="site-nav" aria-label="Навигация по странице">
           <a href="#parameters">Параметры</a>
-          <a href="#scheme">Схема</a>
-          <a href="#workspace">Схема и расчёты</a>
-          <a href="info/PROJECT_CONTEXT.md">Контекст</a>
-          <a href="info/IMPLEMENTATION_LOG.md">Журнал</a>
+          <a href="#scheme">Опорная схема</a>
+          <a href="#calculations">Графики и расчёты</a>
         </nav>
       </div>
     </header>
@@ -69,26 +67,19 @@
             <p class="eyebrow">Общая теория связи</p>
             <h1>Путь аналогового сообщения через цифровую систему связи</h1>
             <p class="hero__lead">
-              Приложение будет последовательно показывать, как меняется
-              сигнал: от источника сообщения до восстановления у получателя.
+              Задайте вариант и выбирайте блоки на схеме. Для каждого блока
+              появятся график сигнала и расчёт.
             </p>
 
             <div class="hero__actions">
               <a class="button button--primary" href="#parameters">
-                Задать исходные данные
+                Задать параметры
               </a>
-              <a class="button button--secondary" href="info/IMPLEMENTATION_LOG.md">
-                Посмотреть журнал
+              <a class="button button--secondary" href="#scheme">
+                Смотреть схему
               </a>
             </div>
           </div>
-
-          <aside class="hero-card" aria-label="Текущее состояние проекта">
-            <strong>Исходные данные подключены</strong>
-            <p>
-            </p>
-            <span class="status-pill">Блоки готовы</span>
-          </aside>
         </div>
       </section>
 
@@ -98,10 +89,6 @@
             <p class="eyebrow">Блок · исходных данных</p>
             <h2>Параметры варианта</h2>
           </div>
-          <p>
-            Заполните значения из своего задания. Форма задаёт условия для
-            всех следующих расчётов и обновляет сводку сразу после ввода.
-          </p>
         </div>
 
         <div class="parameters-layout">
@@ -118,8 +105,8 @@
               </label>
 
               <p>
-                После выбора варианта все поля заполнятся автоматически.
-                Любое ручное изменение вернёт форму в свободный режим.
+                После выбора варианта поля заполнятся автоматически. Любое
+                значение можно поправить вручную.
               </p>
             </div>
 
@@ -333,8 +320,8 @@
             <p class="reception-note" data-summary-reception-description></p>
 
             <p class="summary-note">
-              Исходные данные не преобразуют сигнал, поэтому график появится
-              в следующем блоке: «Источник и первичный преобразователь».
+              Здесь только исходные числа. Сам сигнал появится в первом блоке
+              схемы.
             </p>
           </aside>
         </div>
@@ -342,16 +329,16 @@
 
       <section class="section section--workspace" id="workspace">
         <div class="page-shell">
-          <div class="workspace-layout">
+          <div class="workspace-layout" id="calculations">
             <div class="workspace-main">
               <article class="stage-panel" data-stage-panel aria-live="polite"></article>
             </div>
 
-            <aside class="route-sidebar" id="scheme" aria-label="Маршрут сигнала">
+            <aside class="route-sidebar" aria-label="Схема передачи">
               <div class="route-sidebar__header">
                 <p class="eyebrow">Структурная схема</p>
-                <h2>Маршрут сигнала</h2>
-                <p>Выберите блок, чтобы открыть его рабочую карточку.</p>
+                <h2>Схема передачи</h2>
+                <p>Нажмите на блок, чтобы открыть графики и расчёты.</p>
               </div>
 
               <div class="scheme-legend scheme-legend--stacked" aria-label="Обозначения групп схемы">
@@ -370,8 +357,8 @@
 
     <footer class="site-footer">
       <div class="page-shell site-footer__inner">
-        <span>Учебная визуализация по дисциплине «Общая теория связи»</span>
-        <span>Каркас проекта · <span data-current-year></span></span>
+        <span>Учебная визуализация курсовой работы по дисциплине «Общая теория связи» для студентов 2 курса направления 11.03.02</span>
+        <span>Высшая инженерная школа · <span data-current-year></span></span>
       </div>
     </footer>
   </body>
